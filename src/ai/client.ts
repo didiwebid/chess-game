@@ -1,5 +1,71 @@
 import type { ChatMessage, PlayerConfig } from '../types/chess';
 
+// -- Dynamic local URL proxy --
+// When the base URL points to a local address (localhost, private IPs), the
+// browser blocks the request due to CORS. We rewrite the URL to go through
+// Vite's /proxy-redirect middleware, which forwards it server-side.
+
+const PROXY_PREFIX = '/proxy-redirect';
+const TARGET_HEADER = 'x-proxy-target';
+
+// Matches localhost, 127.x, 10.x, 172.16-31.x, 192.168.x, 0.0.0.0
+const LOCAL_HOST_RE = /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|0\.0\.0\.0)$/;
+
+function isLocalUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return LOCAL_HOST_RE.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * If `baseUrl` is a local address, rewrite it to go through Vite's dynamic
+ * proxy so the browser never sees a cross-origin request.
+ *
+ *   http://localhost:8000/v1/chat/completions
+ *   → /proxy-redirect/chat/completions  (header: x-proxy-target: http://localhost:8000/v1)
+ */
+function maybeRewriteForProxy(baseUrl: string): {
+  url: string;
+  proxyHeaders: Record<string, string>;
+} {
+  if (!isLocalUrl(baseUrl)) {
+    return { url: baseUrl, proxyHeaders: {} };
+  }
+
+  const base = new URL(baseUrl);
+  // Preserve the target's pathname (e.g. /v1) so it's prepended to endpoints
+  const target = base.origin + base.pathname.replace(/\/+$/, '');
+  return {
+    url: PROXY_PREFIX,
+    proxyHeaders: { [TARGET_HEADER]: target },
+  };
+}
+
+function buildFetchUrl(baseUrl: string, endpointPath: string): {
+  url: string;
+  proxyHeaders: Record<string, string>;
+} {
+  const { url: base, proxyHeaders } = maybeRewriteForProxy(baseUrl);
+
+  if (proxyHeaders[TARGET_HEADER]) {
+    // We're using the proxy — append the endpoint path to the proxy prefix
+    return {
+      url: base + endpointPath,
+      proxyHeaders,
+    };
+  }
+
+  // Normal remote URL — build the full URL the usual way
+  const baseStr = baseUrl.trim().replace(/\/+$/, '');
+  return {
+    url: baseStr + endpointPath,
+    proxyHeaders: {},
+  };
+}
+
 export interface ChatDelta {
   content: string;
   reasoning: string;
@@ -37,18 +103,27 @@ export function isAbortError(error: unknown): boolean {
   ) || (error instanceof Error && error.name === 'AbortError');
 }
 
-function chatEndpoint(baseUrl: string): string {
+function chatEndpoint(baseUrl: string): {
+  url: string;
+  proxyHeaders: Record<string, string>;
+} {
   const base = baseUrl.trim().replace(/\/+$/, '');
   if (!base) throw new AiRequestError('Add an API base URL first.');
-  if (base.endsWith('/chat/completions')) return base;
-  return `${base}/chat/completions`;
+  if (base.endsWith('/chat/completions')) {
+    return buildFetchUrl(base.replace(/\/chat\/completions$/, ''), '');
+  }
+  return buildFetchUrl(base, '/chat/completions');
 }
 
-export function modelsEndpoint(baseUrl: string): string {
+export function modelsEndpoint(baseUrl: string): {
+  url: string;
+  proxyHeaders: Record<string, string>;
+} {
   const base = baseUrl.trim().replace(/\/+$/, '');
-  return base.endsWith('/chat/completions')
-    ? base.replace(/\/chat\/completions$/, '/models')
-    : `${base}/models`;
+  if (base.endsWith('/chat/completions')) {
+    return buildFetchUrl(base.replace(/\/chat\/completions$/, ''), '/models');
+  }
+  return buildFetchUrl(base, '/models');
 }
 
 function authHeaders(apiKey: string): Record<string, string> {
@@ -200,7 +275,7 @@ export async function requestChatCompletion({
   signal,
   onDelta,
 }: ChatOptions): Promise<ChatResult> {
-  const endpoint = chatEndpoint(config.baseUrl);
+  const { url: endpoint, proxyHeaders } = chatEndpoint(config.baseUrl);
   if (!config.model.trim()) {
     throw new AiRequestError('Add a model name first.');
   }
@@ -214,6 +289,7 @@ export async function requestChatCompletion({
         'Content-Type': 'application/json',
         Accept: config.stream ? 'text/event-stream' : 'application/json',
         ...authHeaders(config.apiKey),
+        ...proxyHeaders,
       },
       body: JSON.stringify({
         model: config.model.trim(),
@@ -383,13 +459,15 @@ export async function requestChatCompletion({
 }
 
 async function pingChat(config: PlayerConfig): Promise<void> {
+  const { url: endpoint, proxyHeaders } = chatEndpoint(config.baseUrl);
   const timeout = createRequestSignal(Math.min(config.timeoutMs, 15_000));
   try {
-    const response = await fetch(chatEndpoint(config.baseUrl), {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...authHeaders(config.apiKey),
+        ...proxyHeaders,
       },
       body: JSON.stringify({
         model: config.model.trim(),
@@ -423,13 +501,15 @@ export async function testAiConnection(
   if (!config.baseUrl.trim()) throw new AiRequestError('Add an API base URL first.');
   if (!config.model.trim()) throw new AiRequestError('Add a model name first.');
 
+  const { url: endpoint, proxyHeaders } = modelsEndpoint(config.baseUrl);
   const timeout = createRequestSignal(15_000, signal);
   try {
-    const response = await fetch(modelsEndpoint(config.baseUrl), {
+    const response = await fetch(endpoint, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
         ...authHeaders(config.apiKey),
+        ...proxyHeaders,
       },
       signal: timeout.signal,
     });
