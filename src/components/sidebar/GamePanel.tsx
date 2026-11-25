@@ -10,6 +10,7 @@ import {
   Handshake,
   Pause,
   Play,
+  Repeat,
   RotateCcw,
   Save,
   Sparkles,
@@ -31,6 +32,7 @@ interface GamePanelProps {
   onResetAll: () => void;
   onResign: () => void;
   onOfferDraw: () => void;
+  onClaimDraw: () => void;
 }
 
 export function GamePanel({
@@ -39,11 +41,13 @@ export function GamePanel({
   onResetAll,
   onResign,
   onOfferDraw,
+  onClaimDraw,
 }: GamePanelProps) {
   const status = useChessStore((state) => state.status);
   const turn = useChessStore((state) => state.turn);
   const players = useChessStore((state) => state.players);
   const moves = useChessStore((state) => state.moves);
+  const repetitionCount = useChessStore((state) => state.repetitionCount);
   const aiPaused = useChessStore((state) => state.aiPaused);
   const setAiPaused = useChessStore((state) => state.setAiPaused);
   const aiDelayMs = useChessStore((state) => state.aiDelayMs);
@@ -296,6 +300,20 @@ export function GamePanel({
           </div>
         </div>
         <div className="action-grid">
+          <button
+            type="button"
+            className="data-action"
+            onClick={onClaimDraw}
+            disabled={gameOver || repetitionCount < 3}
+            title={
+              repetitionCount >= 3
+                ? 'Claim a draw by threefold repetition'
+                : 'Claimable once the position has occurred three times'
+            }
+          >
+            <Repeat size={15} />
+            <span>Claim threefold</span>
+          </button>
           <button
             type="button"
             className="data-action"

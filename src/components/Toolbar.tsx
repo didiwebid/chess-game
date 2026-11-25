@@ -7,6 +7,7 @@ import {
   Github,
   Handshake,
   Plus,
+  Repeat,
   Save,
   Undo2,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ interface ToolbarProps {
   onOpenSaves: (intent: 'save' | 'load') => void;
   onResign: () => void;
   onOfferDraw: () => void;
+  onClaimDraw: () => void;
 }
 
 export function Toolbar({
@@ -30,10 +32,12 @@ export function Toolbar({
   onOpenSaves,
   onResign,
   onOfferDraw,
+  onClaimDraw,
 }: ToolbarProps) {
   const moves = useChessStore((state) => state.moves);
   const status = useChessStore((state) => state.status);
   const turn = useChessStore((state) => state.turn);
+  const repetitionCount = useChessStore((state) => state.repetitionCount);
   const players = useChessStore((state) => state.players);
   const flipBoard = useChessStore((state) => state.flipBoard);
   const notify = useChessStore((state) => state.notify);
@@ -171,6 +175,22 @@ export function Toolbar({
         <span className="toolbar-divider" aria-hidden="true" />
 
         <div className="toolbar-group">
+          <button
+            type="button"
+            className="toolbar-btn"
+            onClick={onClaimDraw}
+            disabled={gameOver || repetitionCount < 3}
+            title={
+              gameOver
+                ? 'The game has ended'
+                : repetitionCount >= 3
+                  ? `Claim a draw by threefold repetition (position occurred ${repetitionCount} times; fivefold is automatic)`
+                  : 'Claimable once the position has occurred three times; fivefold draws automatically'
+            }
+          >
+            <Repeat size={16} />
+            <span className="toolbar-label">Claim</span>
+          </button>
           <button
             type="button"
             className="toolbar-btn"

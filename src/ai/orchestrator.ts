@@ -417,7 +417,16 @@ export async function requestAiTurn(color: Color): Promise<void> {
             useChessStore.getState().setStream(color, '', line);
           };
 
-          const engineResult = await engine.search(requestFen, config, signal, onInfo);
+          // UCI move history for engines without a FEN parser (Sunfish).
+          // FEN-based engines ignore this argument.
+          const historyUci = initial.moves
+            .filter((move) => move.from && move.to)
+            .map(
+              (move) =>
+                `${move.from}${move.to}${move.promotion ? move.promotion.toLowerCase() : ''}`,
+            );
+
+          const engineResult = await engine.search(requestFen, config, signal, onInfo, historyUci);
 
           if (!isStillActive(color, requestVersion, requestFen, signal)) return;
 

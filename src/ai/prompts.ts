@@ -27,7 +27,7 @@ const RULES_AND_FORMAT = `RULES SUMMARY (guidance only — the chess engine enfo
 - En passant: a pawn may capture an enemy pawn that just double-stepped beside it, as if it had single-stepped, on the immediately following move.
 - Promotion: a pawn reaching the last rank must promote (Q/R/B/N; prefer queen unless there is a clear tactical reason).
 - You may only move to a square listed in the legal moves provided; moves leaving your king in check are illegal.
-- Draws: stalemate (no legal move, not in check), threefold repetition, 50-move rule, insufficient material.
+- Draws: stalemate (no legal move, not in check), fivefold repetition (automatic; the app can also be drawn by a threefold repetition claim), 50-move rule, insufficient material.
 
 RESPONSE FORMAT (strict): reply with ONLY a JSON object, no markdown fence, no prose outside JSON:
 {"move":"<one SAN legal move from the list>","reasoning":"<2-5 sentences: candidate ideas, why this move, threats created/defended>","confidence":"high|medium|low"}

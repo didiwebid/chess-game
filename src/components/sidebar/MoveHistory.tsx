@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
   ChevronDown,
@@ -12,6 +12,7 @@ import {
 import { useChessStore } from '../../store/chessStore';
 import type { MoveRecord } from '../../types/chess';
 import { formatElapsed } from '../../hooks/useElapsed';
+import { titleForColor } from '../../engine/chessUtils';
 
 function MoveCell({
   move,
@@ -105,6 +106,21 @@ export function MoveHistory() {
     });
   };
 
+  const reasoningPlies = useMemo(
+    () =>
+      showThinking
+        ? moves.filter((move) => move.reasoning).map((move) => move.ply)
+        : [],
+    [moves, showThinking],
+  );
+  const allExpanded =
+    reasoningPlies.length > 0 &&
+    reasoningPlies.every((ply) => expanded.has(ply));
+
+  const toggleAllReasoning = () => {
+    setExpanded(allExpanded ? new Set() : new Set(reasoningPlies));
+  };
+
   const selectMove = (move: MoveRecord) => {
     setViewPly(move.ply);
   };
@@ -137,7 +153,8 @@ export function MoveHistory() {
           <div className="reasoning-panel">
             <div className="reasoning-meta">
               <Bot size={13} />
-              <span>AI reasoning</span>
+              <span className="ai-chip-dot white" aria-hidden="true" />
+              <span>{titleForColor('white')} AI</span>
               {white.model ? <span className="reasoning-model">{white.model}</span> : null}
               {white.elapsedMs ? <span>{formatElapsed(Math.round(white.elapsedMs / 1000))}</span> : null}
             </div>
@@ -154,7 +171,8 @@ export function MoveHistory() {
           <div className="reasoning-panel">
             <div className="reasoning-meta">
               <Bot size={13} />
-              <span>AI reasoning</span>
+              <span className="ai-chip-dot black" aria-hidden="true" />
+              <span>{titleForColor('black')} AI</span>
               {black.model ? <span className="reasoning-model">{black.model}</span> : null}
               {black.elapsedMs ? <span>{formatElapsed(Math.round(black.elapsedMs / 1000))}</span> : null}
             </div>
@@ -206,6 +224,26 @@ export function MoveHistory() {
             <Radio size={12} />
             Live
           </button>
+          <button
+            type="button"
+            className={`reasoning-all-button ${allExpanded ? 'is-open' : ''}`}
+            onClick={toggleAllReasoning}
+            disabled={reasoningPlies.length === 0}
+            aria-expanded={allExpanded}
+            aria-label={allExpanded ? 'Collapse all AI reasoning' : 'Show all AI reasoning'}
+            title={
+              reasoningPlies.length === 0
+                ? moves.some((move) => move.reasoning)
+                  ? 'Enable Show AI reasoning to use this'
+                  : 'No AI reasoning yet'
+                : allExpanded
+                  ? 'Collapse all AI reasoning'
+                  : 'Show all AI reasoning'
+            }
+          >
+            <Sparkles size={12} />
+            <ChevronDown size={11} />
+          </button>
         </div>
       </div>
 
@@ -217,7 +255,20 @@ export function MoveHistory() {
             <p>White opens the game. Every move and every AI thought will appear here.</p>
           </div>
         ) : (
-          <div className="move-rows">{rows}</div>
+          <div className="move-rows">
+            <div className="move-columns-header" aria-hidden="true">
+              <span />
+              <span className="move-col-label">
+                <span className="ai-chip-dot white" />
+                White
+              </span>
+              <span className="move-col-label">
+                <span className="ai-chip-dot black" />
+                Black
+              </span>
+            </div>
+            {rows}
+          </div>
         )}
       </div>
 

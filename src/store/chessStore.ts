@@ -21,6 +21,7 @@ import type {
 import {
   START_FEN,
   colorFromTurn,
+  countRepetitions,
   deriveStatus,
   findKingSquare,
   moveToRecord,
@@ -61,6 +62,8 @@ interface ChessStore {
   moves: MoveRecord[];
   lastMove: MoveRecord | null;
   status: GameStatus;
+  /** Times the current position has occurred (FIDE repetition rules). */
+  repetitionCount: number;
   inCheck: boolean;
   checkSquare: Square | null;
   gameVersion: number;
@@ -109,6 +112,7 @@ interface ChessStore {
   undo: () => void;
   resign: (color: Color) => void;
   agreeDraw: () => void;
+  claimRepetitionDraw: () => void;
   offerDraw: (by: Color) => void;
   clearDrawOffer: () => void;
 
@@ -233,6 +237,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
   moves: [],
   lastMove: null,
   status: initialStatus,
+  repetitionCount: 1,
   inCheck: false,
   checkSquare: null,
   gameVersion: 0,
@@ -281,6 +286,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       moves: [],
       lastMove: null,
       status: initialStatus,
+      repetitionCount: 1,
       inCheck: false,
       checkSquare: null,
       gameVersion: state.gameVersion + 1,
@@ -316,6 +322,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       moves: [],
       lastMove: null,
       status: initialStatus,
+      repetitionCount: 1,
       inCheck: false,
       checkSquare: null,
       gameVersion: state.gameVersion + 1,
@@ -387,7 +394,11 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       };
     }
 
-    const derived = deriveStatus(nextEngine);
+    const nextRepetitionCount = countRepetitions(
+      snapshots[0] ?? START_FEN,
+      records.map((record) => record.san),
+    );
+    const derived = deriveStatus(nextEngine, nextRepetitionCount);
     const validSavedResult =
       data.status &&
       ['ongoing', 'white', 'black', 'draw'].includes(data.status.result) &&
@@ -422,6 +433,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       moves: records,
       lastMove: records.length > 0 ? records[records.length - 1] : null,
       status: nextStatus,
+      repetitionCount: nextRepetitionCount,
       inCheck: nextEngine.isCheck(),
       checkSquare:
         nextStatus.result === 'ongoing' && nextEngine.isCheck()
@@ -471,10 +483,14 @@ export const useChessStore = create<ChessStore>((set, get) => ({
 
     const snapshot = engine.fen();
     const nextTurn = colorFromTurn(engine.turn());
-    const nextStatus = deriveStatus(engine);
     const record = moveToRecord(move, 'human');
     record.ply = state.moves.length + 1;
     const nextMoves = [...state.moves, record];
+    const nextRepetitionCount = countRepetitions(
+      state.initialFen,
+      nextMoves.map((moveRecord) => moveRecord.san),
+    );
+    const nextStatus = deriveStatus(engine, nextRepetitionCount);
 
     const gameJustEnded = nextStatus.result !== 'ongoing';
     const nextScoreboard =
@@ -489,6 +505,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       moves: nextMoves,
       lastMove: record,
       status: nextStatus,
+      repetitionCount: nextRepetitionCount,
       inCheck: engine.isCheck(),
       checkSquare:
         nextStatus.result === 'ongoing' && engine.isCheck()
@@ -540,10 +557,14 @@ export const useChessStore = create<ChessStore>((set, get) => ({
 
     const snapshot = engine.fen();
     const nextTurn = colorFromTurn(engine.turn());
-    const nextStatus = deriveStatus(engine);
     const record = moveToRecord(move, 'ai', meta);
     record.ply = state.moves.length + 1;
     const nextMoves = [...state.moves, record];
+    const nextRepetitionCount = countRepetitions(
+      state.initialFen,
+      nextMoves.map((moveRecord) => moveRecord.san),
+    );
+    const nextStatus = deriveStatus(engine, nextRepetitionCount);
 
     const gameJustEnded = nextStatus.result !== 'ongoing';
     const nextScoreboard =
@@ -558,6 +579,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       moves: nextMoves,
       lastMove: record,
       status: nextStatus,
+      repetitionCount: nextRepetitionCount,
       inCheck: engine.isCheck(),
       checkSquare:
         nextStatus.result === 'ongoing' && engine.isCheck()
@@ -607,10 +629,20 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       };
     }
 
+    const nextRepetitionCount = countRepetitions(
+      state.initialFen,
+      nextMoves.map((moveRecord) => moveRecord.san),
+    );
+    const nextStatus = deriveStatus(engine, nextRepetitionCount);
+    const gameJustEnded = nextStatus.result !== 'ongoing';
+
     const wasScored = state.scoredCurrentGame;
-    const nextScoreboard = wasScored
+    const revertedScoreboard = wasScored
       ? revertResultFromScoreboard(state.scoreboard, state.status.result)
       : state.scoreboard;
+    const nextScoreboard = gameJustEnded
+      ? applyResultToScoreboard(revertedScoreboard, nextStatus.result)
+      : revertedScoreboard;
 
     set({
       fen: engine.fen(),
@@ -618,7 +650,8 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       turn: nextTurn,
       moves: nextMoves,
       lastMove: nextMoves[nextMoves.length - 1] ?? null,
-      status: initialStatus,
+      status: nextStatus,
+      repetitionCount: nextRepetitionCount,
       inCheck: engine.isCheck(),
       checkSquare:
         engine.isCheck()
@@ -627,7 +660,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       gameVersion: state.gameVersion + 1,
       threads,
       scoreboard: nextScoreboard,
-      scoredCurrentGame: false,
+      scoredCurrentGame: gameJustEnded,
       thinking: createThinkingState(),
       thinkingStartedAt: createTimestampState(),
       streamRaw: createStringState(),
@@ -674,6 +707,27 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       : applyResultToScoreboard(state.scoreboard, 'draw');
     set({
       status: { result: 'draw', reason: 'Agreement' },
+      gameVersion: state.gameVersion + 1,
+      scoreboard: nextScoreboard,
+      scoredCurrentGame: true,
+      thinking: createThinkingState(),
+      thinkingStartedAt: createTimestampState(),
+      streamRaw: createStringState(),
+      streamReasoning: createStringState(),
+      drawOffer: null,
+    });
+    if (nextScoreboard !== state.scoreboard) saveScoreboard(nextScoreboard);
+  },
+
+  claimRepetitionDraw: () => {
+    const state = get();
+    if (state.status.result !== 'ongoing') return;
+    if (state.repetitionCount < 3) return;
+    const nextScoreboard = state.scoredCurrentGame
+      ? state.scoreboard
+      : applyResultToScoreboard(state.scoreboard, 'draw');
+    set({
+      status: { result: 'draw', reason: 'Threefold repetition' },
       gameVersion: state.gameVersion + 1,
       scoreboard: nextScoreboard,
       scoredCurrentGame: true,

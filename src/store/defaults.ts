@@ -18,6 +18,7 @@ export function validProviderType(value: unknown): value is ProviderType {
     value === 'lozza' ||
     value === 'tonnetto' ||
     value === 'stockfish' ||
+    value === 'sunfish' ||
     value === 'fallback'
   );
 }
@@ -33,6 +34,7 @@ export const ENGINE_DEFAULT_DEPTH: Record<ProviderType, number> = {
   stockfish: 20,
   lozza: 4,
   tonnetto: 3,
+  sunfish: 4,
   fallback: 1,
 };
 
@@ -42,7 +44,7 @@ export function createDefaultConfig(color: Color): PlayerConfig {
     apiKey: getApiKeys()[color],
     model: DEFAULT_MODEL,
     temperature: 0.7,
-    maxTokens: 700,
+    maxTokens: 3000,
     stream: true,
     personaPreset: color === 'white' ? 'positional' : 'tactical',
     systemPromptOverride: '',
@@ -135,7 +137,7 @@ export function sanitizeConfig(config: PlayerConfig): PlayerConfig {
       ? (config.uciOptions as Record<string, string | number>)
       : {},
     temperature: clampNumber(config.temperature, 0, 2, 0.7),
-    maxTokens: Math.round(clampNumber(config.maxTokens, 64, 32_000, 700)),
+    maxTokens: Math.round(clampNumber(config.maxTokens, 64, 32_000, 3000)),
     timeoutMs: Math.round(clampNumber(config.timeoutMs, 5_000, 180_000, 30_000)),
     context: {
       maxTokens: Math.round(

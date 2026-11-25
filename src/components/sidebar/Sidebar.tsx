@@ -12,6 +12,7 @@ interface SidebarProps {
   onResetAll: () => void;
   onResign: () => void;
   onOfferDraw: () => void;
+  onClaimDraw: () => void;
 }
 
 export function Sidebar({
@@ -21,6 +22,7 @@ export function Sidebar({
   onResetAll,
   onResign,
   onOfferDraw,
+  onClaimDraw,
 }: SidebarProps) {
   const tab = useChessStore((state) => state.sidebarTab);
   const setTab = useChessStore((state) => state.setSidebarTab);
@@ -75,6 +77,7 @@ export function Sidebar({
             onResetAll={onResetAll}
             onResign={onResign}
             onOfferDraw={onOfferDraw}
+            onClaimDraw={onClaimDraw}
           />
         ) : null}
       </div>

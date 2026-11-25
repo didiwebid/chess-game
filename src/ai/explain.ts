@@ -179,9 +179,10 @@ export function analyzePosition(fen: string): PositionFacts {
     chess.get('d1')?.type === 'q' || chess.get('d8')?.type === 'q';
   const halfMoves = Math.floor(chess.moveNumber());
   let phase: PositionFacts['phase'] = 'middlegame';
-  if (halfMoves <= 8) phase = 'opening';
-  else if (!queensOn || materialForColor(chess, 'white') + materialForColor(chess, 'black') <= 24) {
+  if (!queensOn || materialForColor(chess, 'white') + materialForColor(chess, 'black') <= 24) {
     phase = 'endgame';
+  } else if (halfMoves <= 8) {
+    phase = 'opening';
   }
 
   return {
@@ -327,6 +328,50 @@ function describeEval(cp: number, engineIsWhite: boolean): string {
   return `${leader} has ${scale}`;
 }
 
+// Friendly labels for engines without their own eval output.
+const ENGINE_LABELS: Record<string, string> = {
+  stockfish: 'Stockfish',
+  lozza: 'Lozza',
+  tonnetto: 'Tonnetto',
+  sunfish: 'Sunfish',
+  fallback: 'the fallback engine',
+  openai: 'the model',
+};
+
+/** Material balance sentence from pawn-point totals (positive = White ahead). */
+function materialClause(white: number, black: number): string {
+  const diff = white - black;
+  if (Math.abs(diff) < 0.5) return 'Material on the board is roughly balanced.';
+  const leader = diff > 0 ? 'White' : 'Black';
+  const points = Math.abs(diff);
+  const text = Number.isInteger(points) ? String(points) : points.toFixed(1);
+  const unit = points >= 1.5 ? 'about ' : '';
+  return `${leader} leads by ${unit}${text} points on material.`;
+}
+
+/** Rule-based positional suggestion, tuned to the current phase and facts. */
+function planClause(facts: PositionFacts, engineColor: Color): string {
+  if (facts.inCheck) return 'The immediate priority is answering the check safely.';
+  if (facts.phase === 'endgame') {
+    const diff = facts.materialWhite - facts.materialBlack;
+    const engineAhead = (engineColor === 'white' ? diff : -diff) >= 1.5;
+    return engineAhead
+      ? 'In the endgame, trading pieces down and activating the king favors the side with extra material.'
+      : 'In the endgame, keep pieces on the board and avoid exchanges while searching for counterplay.';
+  }
+  if (facts.phase === 'opening') {
+    const engineCastled = engineColor === 'white' ? facts.whiteCastled : facts.blackCastled;
+    if (facts.minorPiecesAtHome > 2 || !engineCastled) {
+      return 'In the opening, the priorities are developing the minor pieces and securing the king with castling.';
+    }
+    return 'Development is largely complete; the next step is improving piece activity before opening the center.';
+  }
+  if (facts.attackedEnemyPieces > 0) {
+    return 'Keeping pressure on the attacked pieces restricts the opponent’s defensive choices.';
+  }
+  return 'In the middlegame, improve piece activity and control central squares before committing to a pawn break.';
+}
+
 export interface EngineReasoning {
   reasoning: string;
   confidence: 'high' | 'medium' | 'low';
@@ -365,7 +410,7 @@ export function buildEngineReasoning(options: {
     sentence.push(`This is the ${opening}.`);
   }
 
-  // 3. Positional rationale, based on the position after the move.
+  // 3. Positional rationale, based on the position before and after the move.
   const preFacts = analyzePosition(fen);
   if (preFacts.inCheck) {
     sentence.push('The move responds to the check on the king.');
@@ -373,14 +418,19 @@ export function buildEngineReasoning(options: {
   const postFen = applyMoveToFen(fen, san);
   if (postFen) {
     const postFacts = analyzePosition(postFen);
+
+    // Material balance in pawn points.
+    sentence.push(materialClause(postFacts.materialWhite, postFacts.materialBlack));
+
+    // Active threats after the move.
     if (postFacts.attackedEnemyPieces > 0) {
       sentence.push(
-        `After the move, the opponent has ${postFacts.attackedEnemyPieces} piece${postFacts.attackedEnemyPieces === 1 ? '' : 's'} under attack.`,
+        `After the move, ${postFacts.attackedEnemyPieces} opponent piece${postFacts.attackedEnemyPieces === 1 ? ' is' : 's are'} under attack.`,
       );
     }
-    if (postFacts.minorPiecesAtHome > 2) {
-      sentence.push('Development is not yet complete, with several pieces still at home.');
-    }
+
+    // Phase-aware suggested plan (includes development guidance in the opening).
+    sentence.push(planClause(postFacts, color));
   }
 
   // 4. Main line preview.
@@ -408,10 +458,11 @@ export function buildEngineReasoning(options: {
     const abs = Math.abs(result.eval);
     confidence = abs >= 100 ? 'high' : 'medium';
   } else {
+    const label = ENGINE_LABELS[providerType] ?? 'the local engine';
     sentence.push(
-      `The local engine chose this move at depth ${result.depth}. It does not report a numeric evaluation, so the choice is based on its internal search.`,
+      `${label} chose this move at depth ${result.depth} from its local search; it reports no numeric evaluation, so this confidence reflects the search depth rather than a score.`,
     );
-    confidence = 'low';
+    confidence = result.depth >= 8 ? 'medium' : 'low';
   }
 
   return {
