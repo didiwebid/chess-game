@@ -54,6 +54,8 @@ export function GamePanel({
   const setShowCoordinates = useChessStore((state) => state.setShowCoordinates);
   const flipBoard = useChessStore((state) => state.flipBoard);
   const notify = useChessStore((state) => state.notify);
+  const scoreboard = useChessStore((state) => state.scoreboard);
+  const resetScoreboard = useChessStore((state) => state.resetScoreboard);
 
   const bothAi =
     players.white.controller === 'ai' && players.black.controller === 'ai';
@@ -84,6 +86,16 @@ export function GamePanel({
   const handlePgn = () => {
     downloadCurrentPgn();
     notify('PGN exported.', 'success');
+  };
+
+  const handleResetScore = () => {
+    resetScoreboard();
+    notify('Scoreboard reset.', 'success');
+  };
+
+  const pointsFor = (entry: { wins: number; draws: number }) => {
+    const points = entry.wins + entry.draws * 0.5;
+    return Number.isInteger(points) ? String(points) : points.toFixed(1);
   };
 
   return (
@@ -123,6 +135,43 @@ export function GamePanel({
           </div>
         ))}
       </div>
+
+      <section className="game-section score-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Match score</p>
+            <h4>Scoreboard</h4>
+          </div>
+          <button
+            type="button"
+            className="score-reset-button"
+            onClick={handleResetScore}
+            title="Reset the scoreboard"
+          >
+            <RotateCcw size={13} />
+            Reset score
+          </button>
+        </div>
+        <div className="scoreboard">
+          {(['white', 'black'] as const).map((color) => (
+            <div className="scoreboard-row" key={color}>
+              <span className={`ai-chip-dot ${color}`} />
+              <strong className="scoreboard-name">{players[color].name}</strong>
+              <span className="scoreboard-stats">
+                <span title="Wins">{scoreboard[color].wins}W</span>
+                <span title="Draws">{scoreboard[color].draws}D</span>
+                <span title="Losses">{scoreboard[color].losses}L</span>
+              </span>
+              <span className="scoreboard-points" title="Points">
+                {pointsFor(scoreboard[color])}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="section-note">
+          Points: a win is 1, a draw is 0.5. Saved in this browser.
+        </p>
+      </section>
 
       {bothAi ? (
         <section className="game-section">

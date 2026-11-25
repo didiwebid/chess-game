@@ -12,6 +12,8 @@ import type {
   MoveRecord,
   Player,
   PlayerConfigPatch,
+  Result,
+  Scoreboard,
   ThreadTurn,
   Toast,
   ToastKind,
@@ -32,6 +34,11 @@ import {
   sanitizeConfig,
 } from './defaults';
 import { setApiKey } from '../persistence/apiKeys';
+import {
+  createEmptyScoreboard,
+  loadScoreboard,
+  saveScoreboard,
+} from '../persistence/scoreboard';
 
 export type SidebarTab = 'moves' | 'thinking' | 'game';
 
@@ -77,11 +84,15 @@ interface ChessStore {
   drawOffer: { by: Color } | null;
   toasts: Toast[];
 
+  scoreboard: Scoreboard;
+  scoredCurrentGame: boolean;
+
   notify: (message: string, kind?: ToastKind) => void;
   dismissToast: (id: number) => void;
 
   newGame: () => void;
   resetAll: () => void;
+  resetScoreboard: () => void;
   restoreGame: (data: LoadedGameData) => RestoreResult;
   makeMove: (input: {
     from: Square;
@@ -149,6 +160,47 @@ function createErrorState(): Record<Color, AiErrorInfo | null> {
   return { white: null, black: null };
 }
 
+/** Apply a finished game's result to the scoreboard. */
+function applyResultToScoreboard(
+  scoreboard: Scoreboard,
+  result: Result,
+): Scoreboard {
+  const next: Scoreboard = {
+    white: { ...scoreboard.white },
+    black: { ...scoreboard.black },
+  };
+  if (result === 'draw') {
+    next.white.draws += 1;
+    next.black.draws += 1;
+  } else if (result === 'white' || result === 'black') {
+    next[result].wins += 1;
+    next[opposite(result)].losses += 1;
+  }
+  return next;
+}
+
+/** Reverse a previously applied result (used when an ended game is undone). */
+function revertResultFromScoreboard(
+  scoreboard: Scoreboard,
+  result: Result,
+): Scoreboard {
+  const next: Scoreboard = {
+    white: { ...scoreboard.white },
+    black: { ...scoreboard.black },
+  };
+  if (result === 'draw') {
+    next.white.draws = Math.max(0, next.white.draws - 1);
+    next.black.draws = Math.max(0, next.black.draws - 1);
+  } else if (result === 'white' || result === 'black') {
+    next[result].wins = Math.max(0, next[result].wins - 1);
+    next[opposite(result)].losses = Math.max(
+      0,
+      next[opposite(result)].losses - 1,
+    );
+  }
+  return next;
+}
+
 function normalizeThread(thread: AIThread | undefined, maxPly: number): AIThread {
   if (!thread) return createEmptyThread();
   const turns = Array.isArray(thread.turns)
@@ -204,6 +256,9 @@ export const useChessStore = create<ChessStore>((set, get) => ({
   drawOffer: null,
   toasts: [],
 
+  scoreboard: loadScoreboard(),
+  scoredCurrentGame: false,
+
   notify: (message, kind = 'info') => {
     const id = (toastSequence += 1);
     set((state) => ({
@@ -240,7 +295,14 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       aiPaused: false,
       aiHold: { white: false, black: false },
       sidebarTab: 'moves',
+      scoredCurrentGame: false,
     }));
+  },
+
+  resetScoreboard: () => {
+    const empty = createEmptyScoreboard();
+    set({ scoreboard: empty, scoredCurrentGame: false });
+    saveScoreboard(empty);
   },
 
   resetAll: () => {
@@ -272,6 +334,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       aiHold: { white: false, black: false },
       aiDelayMs: 800,
       drawOffer: null,
+      scoredCurrentGame: false,
     }));
   },
 
@@ -381,6 +444,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       aiPaused: false,
       aiHold: { white: false, black: false },
       sidebarTab: 'moves',
+      scoredCurrentGame: false,
     }));
 
     return { ok: true };
@@ -412,6 +476,12 @@ export const useChessStore = create<ChessStore>((set, get) => ({
     record.ply = state.moves.length + 1;
     const nextMoves = [...state.moves, record];
 
+    const gameJustEnded = nextStatus.result !== 'ongoing';
+    const nextScoreboard =
+      gameJustEnded && !state.scoredCurrentGame
+        ? applyResultToScoreboard(state.scoreboard, nextStatus.result)
+        : state.scoreboard;
+
     set({
       fen: snapshot,
       snapshots: [...state.snapshots, snapshot],
@@ -427,11 +497,15 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       gameVersion: state.gameVersion + 1,
       viewPly: null,
       drawOffer: null,
+      scoreboard: nextScoreboard,
+      scoredCurrentGame: gameJustEnded ? true : state.scoredCurrentGame,
       thinking: { ...state.thinking, [record.color]: false },
       thinkingStartedAt: { ...state.thinkingStartedAt, [record.color]: null },
       streamRaw: { ...state.streamRaw, [record.color]: '' },
       streamReasoning: { ...state.streamReasoning, [record.color]: '' },
     });
+
+    if (nextScoreboard !== state.scoreboard) saveScoreboard(nextScoreboard);
 
     return { ok: true, record };
   },
@@ -471,6 +545,12 @@ export const useChessStore = create<ChessStore>((set, get) => ({
     record.ply = state.moves.length + 1;
     const nextMoves = [...state.moves, record];
 
+    const gameJustEnded = nextStatus.result !== 'ongoing';
+    const nextScoreboard =
+      gameJustEnded && !state.scoredCurrentGame
+        ? applyResultToScoreboard(state.scoreboard, nextStatus.result)
+        : state.scoreboard;
+
     set({
       fen: snapshot,
       snapshots: [...state.snapshots, snapshot],
@@ -485,11 +565,15 @@ export const useChessStore = create<ChessStore>((set, get) => ({
           : null,
       gameVersion: state.gameVersion + 1,
       drawOffer: null,
+      scoreboard: nextScoreboard,
+      scoredCurrentGame: gameJustEnded ? true : state.scoredCurrentGame,
       thinking: { ...state.thinking, [color]: false },
       thinkingStartedAt: { ...state.thinkingStartedAt, [color]: null },
       streamRaw: { ...state.streamRaw, [color]: '' },
       streamReasoning: { ...state.streamReasoning, [color]: '' },
     });
+
+    if (nextScoreboard !== state.scoreboard) saveScoreboard(nextScoreboard);
 
     return { ok: true, record };
   },
@@ -523,6 +607,11 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       };
     }
 
+    const wasScored = state.scoredCurrentGame;
+    const nextScoreboard = wasScored
+      ? revertResultFromScoreboard(state.scoreboard, state.status.result)
+      : state.scoreboard;
+
     set({
       fen: engine.fen(),
       snapshots,
@@ -537,6 +626,8 @@ export const useChessStore = create<ChessStore>((set, get) => ({
           : null,
       gameVersion: state.gameVersion + 1,
       threads,
+      scoreboard: nextScoreboard,
+      scoredCurrentGame: false,
       thinking: createThinkingState(),
       thinkingStartedAt: createTimestampState(),
       streamRaw: createStringState(),
@@ -547,37 +638,52 @@ export const useChessStore = create<ChessStore>((set, get) => ({
       aiPaused: false,
       aiHold: { white: nextPlayerIsAi && nextTurn === 'white', black: nextPlayerIsAi && nextTurn === 'black' },
     });
+
+    if (nextScoreboard !== state.scoreboard) saveScoreboard(nextScoreboard);
   },
 
   resign: (color) => {
     const state = get();
     if (state.status.result !== 'ongoing') return;
+    const result = opposite(color);
+    const nextScoreboard = state.scoredCurrentGame
+      ? state.scoreboard
+      : applyResultToScoreboard(state.scoreboard, result);
     set({
       status: {
-        result: opposite(color),
+        result,
         reason: `${state.players[color].name} resigned`,
       },
       gameVersion: state.gameVersion + 1,
+      scoreboard: nextScoreboard,
+      scoredCurrentGame: true,
       thinking: createThinkingState(),
       thinkingStartedAt: createTimestampState(),
       streamRaw: createStringState(),
       streamReasoning: createStringState(),
       drawOffer: null,
     });
+    if (nextScoreboard !== state.scoreboard) saveScoreboard(nextScoreboard);
   },
 
   agreeDraw: () => {
     const state = get();
     if (state.status.result !== 'ongoing') return;
+    const nextScoreboard = state.scoredCurrentGame
+      ? state.scoreboard
+      : applyResultToScoreboard(state.scoreboard, 'draw');
     set({
       status: { result: 'draw', reason: 'Agreement' },
       gameVersion: state.gameVersion + 1,
+      scoreboard: nextScoreboard,
+      scoredCurrentGame: true,
       thinking: createThinkingState(),
       thinkingStartedAt: createTimestampState(),
       streamRaw: createStringState(),
       streamReasoning: createStringState(),
       drawOffer: null,
     });
+    if (nextScoreboard !== state.scoreboard) saveScoreboard(nextScoreboard);
   },
 
   offerDraw: (by) => {

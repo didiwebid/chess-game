@@ -3,6 +3,17 @@ import type { PieceSymbol, Square } from 'chess.js';
 export type Color = 'white' | 'black';
 export type Controller = 'human' | 'ai';
 export type Result = 'ongoing' | 'white' | 'black' | 'draw';
+
+export interface ScoreEntry {
+  wins: number;
+  draws: number;
+  losses: number;
+}
+
+export interface Scoreboard {
+  white: ScoreEntry;
+  black: ScoreEntry;
+}
 export type PersonaPreset =
   | 'aggressive'
   | 'positional'

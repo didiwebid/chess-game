@@ -13,6 +13,7 @@ Each player slot can be independently configured as **Human** or **AI**. An AI s
 - **Context management**: Automatic compression when the context window fills; memory clear and resume options
 - **Full chess rules**: Castling, en passant, promotion (Q/R/B/N), check/checkmate/stalemate, threefold repetition, 50-move rule, insufficient material
 - **Move review**: Click any move in history to review; navigate with arrow keys
+- **Match scoreboard**: Tracks wins, draws, losses, and points for both players across games; persisted in the browser with a one-click reset
 - **Save & load**: Named localStorage slots, autosave, JSON download/upload, PGN export/import
 - **Responsive layout**: Works on desktop and narrow screens; sidebar stacks below the board
 - **Dark walnut-and-gold theme**: Custom CSS, no external fonts or frameworks
@@ -102,6 +103,15 @@ Run entirely in the browser — no API key, no network, no downloads:
 
 API keys are **never** written into save files or PGN exports.
 
+## Match Scoreboard
+
+The **Game** tab shows a scoreboard that tracks the running tally for both players: wins, draws, losses, and total points (a win is 1 point, a draw is 0.5). The scoreboard:
+
+- Updates automatically when a game ends (checkmate, stalemate, resignation, or agreed draw)
+- Persists in the browser across reloads and new games
+- Is reversed automatically if you undo a finished game
+- Can be cleared at any time with the **Reset score** button
+
 ## Project Structure
 
 ```
@@ -137,6 +147,7 @@ src/
   persistence/
     saveLoad.ts                 # Schema, slots, autosave, download/upload, PGN
     apiKeys.ts                  # Browser-local key storage
+    scoreboard.ts               # Match scoreboard persistence (wins/draws/losses)
   types/chess.ts                # Shared TypeScript types
   styles/global.css             # Dark walnut-and-gold theme, responsive
 ```
