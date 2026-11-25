@@ -17,6 +17,7 @@ export function validProviderType(value: unknown): value is ProviderType {
     value === 'openai' ||
     value === 'lozza' ||
     value === 'tonnetto' ||
+    value === 'stockfish' ||
     value === 'fallback'
   );
 }

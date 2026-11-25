@@ -53,6 +53,25 @@ const PERSONAS: PersonaPreset[] = [
   'custom',
 ];
 
+// Settings fields each local engine actually uses. The engine settings
+// panel hides fields the selected provider ignores so users don't see
+// settings that silently do nothing.
+type EngineSettingField =
+  | 'depth'
+  | 'movetimeMs'
+  | 'skillLevel'
+  | 'threads'
+  | 'hash'
+  | 'uciOptions';
+
+const ENGINE_SETTING_FIELDS: Record<ProviderType, readonly EngineSettingField[]> = {
+  openai: [],
+  stockfish: ['depth', 'movetimeMs', 'skillLevel', 'uciOptions'],
+  lozza: ['depth', 'movetimeMs', 'threads', 'hash'],
+  tonnetto: ['depth', 'movetimeMs'],
+  fallback: [],
+};
+
 export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
   const player = useChessStore((state) => state.players[color]);
   const opponent = useChessStore(
@@ -102,6 +121,9 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
     setTest({ status: 'idle' });
     setFormError('');
   };
+
+  const hasEngineField = (field: EngineSettingField) =>
+    ENGINE_SETTING_FIELDS[draft.providerType].includes(field);
 
   const validate = (): PlayerConfig | null => {
     if (!name.trim()) {
@@ -300,6 +322,7 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                 }}
               >
                 <option value="openai">OpenAI-compatible API</option>
+                <option value="stockfish">Stockfish</option>
                 <option value="lozza">Lozza</option>
                 <option value="tonnetto">Tonnetto</option>
                 <option value="fallback">Fallback (deterministic)</option>
@@ -425,143 +448,133 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                 <h3>Chess engine settings</h3>
               </div>
             </div>
-            <div className="form-grid two-col">
-              <label className="field">
-                <span>Search depth</span>
-                <div className="input-with-suffix">
-                  <input
-                    type="number"
-                    min={1}
-                    max={50}
-                    step={1}
-                    value={draft.depth}
-                    onChange={(event) => update({ depth: Number(event.target.value) })}
-                  />
-                  <span>plies</span>
+            {draft.providerType === 'fallback' ? (
+              <div className="security-note">
+                <p>
+                  The fallback engine is deterministic and ignores search
+                  settings, so there is nothing to configure here.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="form-grid two-col">
+                  <label className="field">
+                    <span>Search depth</span>
+                    <div className="input-with-suffix">
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={draft.depth}
+                        onChange={(event) => update({ depth: Number(event.target.value) })}
+                      />
+                      <span>plies</span>
+                    </div>
+                    <small>
+                      {draft.providerType === 'lozza'
+                        ? 'Lozza is capped at depth 4 for speed'
+                        : draft.providerType === 'tonnetto'
+                          ? 'Tonnetto is capped at depth 3 for speed'
+                          : '1 = blitz, 20 = standard, 50 = deep analysis'}
+                    </small>
+                  </label>
+                  <label className="field">
+                    <span>Time per move (ms)</span>
+                    <div className="input-with-suffix">
+                      <input
+                        type="number"
+                        min={100}
+                        max={30000}
+                        step={100}
+                        value={draft.movetimeMs}
+                        onChange={(event) => update({ movetimeMs: Number(event.target.value) })}
+                      />
+                      <span>ms</span>
+                    </div>
+                    <small>Overrides depth if set. 3000 = 3 seconds</small>
+                  </label>
                 </div>
-                <small>1 = blitz, 20 = standard, 50 = deep analysis</small>
-              </label>
-              <label className="field">
-                <span>Time per move (ms)</span>
-                <div className="input-with-suffix">
-                  <input
-                    type="number"
-                    min={100}
-                    max={30000}
-                    step={100}
-                    value={draft.movetimeMs}
-                    onChange={(event) => update({ movetimeMs: Number(event.target.value) })}
-                  />
-                  <span>ms</span>
-                </div>
-                <small>Overrides depth if set. 3000 = 3 seconds</small>
-              </label>
-            </div>
-            <div className="form-grid two-col">
-              <label className="field">
-                <span>Skill level</span>
-                <div className="input-with-suffix">
-                  <input
-                    type="number"
-                    min={0}
-                    max={20}
-                    step={1}
-                    value={draft.skillLevel}
-                    onChange={(event) => update({ skillLevel: Number(event.target.value) })}
-                  />
-                  <span>level</span>
-                </div>
-                <small>0 = weakest, 20 = strongest</small>
-              </label>
-              <label className="field">
-                <span>Luck level</span>
-                <div className="input-with-suffix">
-                  <input
-                    type="number"
-                    min={0}
-                    max={20}
-                    step={1}
-                    value={draft.luckLevel}
-                    onChange={(event) => update({ luckLevel: Number(event.target.value) })}
-                  />
-                  <span>level</span>
-                </div>
-                <small>0 = deterministic, 20 = maximum luck</small>
-              </label>
-            </div>
-            <div className="form-grid two-col">
-              <label className="field">
-                <span>Threads</span>
-                <div className="input-with-suffix">
-                  <input
-                    type="number"
-                    min={1}
-                    max={16}
-                    step={1}
-                    value={draft.threads}
-                    onChange={(event) => update({ threads: Number(event.target.value) })}
-                  />
-                  <span>threads</span>
-                </div>
-                <small>CPU threads for search</small>
-              </label>
-              <label className="field">
-                <span>Hash table (MB)</span>
-                <div className="input-with-suffix">
-                  <input
-                    type="number"
-                    min={16}
-                    max={1024}
-                    step={16}
-                    value={draft.hash}
-                    onChange={(event) => update({ hash: Number(event.target.value) })}
-                  />
-                  <span>MB</span>
-                </div>
-                <small>Memory for transposition table</small>
-              </label>
-            </div>
-            <div className="form-grid two-col">
-              <label className="field">
-                <span>NN Cache (MB)</span>
-                <div className="input-with-suffix">
-                  <input
-                    type="number"
-                    min={16}
-                    max={1024}
-                    step={16}
-                    value={draft.nnCache}
-                    onChange={(event) => update({ nnCache: Number(event.target.value) })}
-                  />
-                  <span>MB</span>
-                </div>
-                <small>Neural network cache for Lc0</small>
-              </label>
-              <label className="field">
-                <span>UCI Options</span>
-                <small>Advanced engine-specific options</small>
-              </label>
-            </div>
-            <div className="form-grid">
-              <label className="field">
-                <span>UCI Options JSON</span>
-                <small>Key-value pairs for engine configuration</small>
-              </label>
-              <textarea
-                rows={3}
-                value={JSON.stringify(draft.uciOptions, null, 2)}
-                onChange={(event) => {
-                  try {
-                    const parsed = JSON.parse(event.target.value);
-                    update({ uciOptions: parsed });
-                  } catch (e) {
-                    update({ uciOptions: {} });
-                  }
-                }}
-                placeholder='{"Threads": 2, "Hash": 512}'
-                spellCheck={false}
-              />
-            </div>
+                {hasEngineField('skillLevel') && (
+                  <div className="form-grid two-col">
+                    <label className="field">
+                      <span>Skill level</span>
+                      <div className="input-with-suffix">
+                        <input
+                          type="number"
+                          min={0}
+                          max={20}
+                          step={1}
+                          value={draft.skillLevel}
+                          onChange={(event) => update({ skillLevel: Number(event.target.value) })}
+                        />
+                        <span>level</span>
+                      </div>
+                      <small>0 = weakest, 20 = strongest</small>
+                    </label>
+                  </div>
+                )}
+                {(hasEngineField('threads') || hasEngineField('hash')) && (
+                  <div className="form-grid two-col">
+                    {hasEngineField('threads') && (
+                      <label className="field">
+                        <span>Threads</span>
+                        <div className="input-with-suffix">
+                          <input
+                            type="number"
+                            min={1}
+                            max={16}
+                            step={1}
+                            value={draft.threads}
+                            onChange={(event) => update({ threads: Number(event.target.value) })}
+                          />
+                          <span>threads</span>
+                        </div>
+                        <small>CPU threads for search</small>
+                      </label>
+                    )}
+                    {hasEngineField('hash') && (
+                      <label className="field">
+                        <span>Hash table (MB)</span>
+                        <div className="input-with-suffix">
+                          <input
+                            type="number"
+                            min={16}
+                            max={1024}
+                            step={16}
+                            value={draft.hash}
+                            onChange={(event) => update({ hash: Number(event.target.value) })}
+                          />
+                          <span>MB</span>
+                        </div>
+                        <small>Memory for transposition table</small>
+                      </label>
+                    )}
+                  </div>
+                )}
+                {hasEngineField('uciOptions') && (
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>UCI Options JSON</span>
+                      <small>Advanced key-value pairs for engine configuration</small>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={JSON.stringify(draft.uciOptions, null, 2)}
+                      onChange={(event) => {
+                        try {
+                          const parsed = JSON.parse(event.target.value);
+                          update({ uciOptions: parsed });
+                        } catch (e) {
+                          update({ uciOptions: {} });
+                        }
+                      }}
+                      placeholder='{"MultiPV": 1}'
+                      spellCheck={false}
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </section>
         )}
 
