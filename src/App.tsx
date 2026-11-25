@@ -270,6 +270,17 @@ export default function App() {
     }
   };
 
+  const handleClaimDraw = () => {
+    const state = useChessStore.getState();
+    if (state.status.result !== 'ongoing' || state.repetitionCount < 3) return;
+    abortAllAiTurns();
+    state.claimRepetitionDraw();
+    notify(
+      `Draw claimed: the position has occurred ${state.repetitionCount} times (threefold repetition).`,
+      'success',
+    );
+  };
+
   const recipientOfOffer = drawOffer ? opposite(drawOffer.by) : null;
   const showDrawModal =
     drawOffer !== null &&
@@ -294,6 +305,7 @@ export default function App() {
         onOpenSaves={(intent) => setModal({ type: 'saves', intent })}
         onResign={() => setModal({ type: 'resign' })}
         onOfferDraw={handleOfferDraw}
+        onClaimDraw={handleClaimDraw}
       />
 
       <main className="app-main">
@@ -320,6 +332,7 @@ export default function App() {
           onResetAll={requestResetAll}
           onResign={() => setModal({ type: 'resign' })}
           onOfferDraw={handleOfferDraw}
+          onClaimDraw={handleClaimDraw}
         />
       </main>
 

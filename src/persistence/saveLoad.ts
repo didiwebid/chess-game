@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { moveToRecord, START_FEN, deriveStatus } from '../engine/chessUtils';
+import { moveToRecord, START_FEN, countRepetitions, deriveStatus } from '../engine/chessUtils';
 import { useChessStore } from '../store/chessStore';
 import { createDefaultConfig, createEmptyThread, sanitizeConfig } from '../store/defaults';
 import { getApiKeys, maskApiKey } from './apiKeys';
@@ -568,7 +568,8 @@ export function bootFromStorage(): BootResult {
 }
 
 function parsePgnStatus(chess: Chess, headers: Record<string, string>): GameStatus {
-  const derived = deriveStatus(chess);
+  const startFen = headers.FEN?.trim() ? headers.FEN : START_FEN;
+  const derived = deriveStatus(chess, countRepetitions(startFen, chess.history()));
   if (derived.result !== 'ongoing') return derived;
   const result = headers.Result;
   if (result === '1-0') return { result: 'white', reason: 'Imported result' };

@@ -36,7 +36,40 @@ export function titleForColor(color: Color): string {
   return color === 'white' ? 'White' : 'Black';
 }
 
-export function deriveStatus(chess: Chess): GameStatus {
+/**
+ * FIDE position key: piece placement, side to move, castling rights and the
+ * en passant square. Move counters are ignored, so the same key means the
+ * same position under the repetition rules.
+ */
+export function positionKey(chess: Chess): string {
+  return chess.fen().split(' ').slice(0, 4).join(' ');
+}
+
+/**
+ * Count how many times the position after `sanMoves` has occurred, including
+ * the starting position. Returns 0 when the move list cannot be replayed.
+ */
+export function countRepetitions(initialFen: string, sanMoves: string[]): number {
+  let chess: Chess;
+  try {
+    chess = new Chess(initialFen);
+  } catch {
+    return 0;
+  }
+  const keys: string[] = [positionKey(chess)];
+  for (const san of sanMoves) {
+    try {
+      chess.move(san);
+    } catch {
+      return 0;
+    }
+    keys.push(positionKey(chess));
+  }
+  const current = keys[keys.length - 1];
+  return keys.reduce((count, key) => (key === current ? count + 1 : count), 0);
+}
+
+export function deriveStatus(chess: Chess, repetitionCount = 0): GameStatus {
   if (chess.isCheckmate()) {
     return {
       result: chess.turn() === 'w' ? 'black' : 'white',
@@ -49,13 +82,17 @@ export function deriveStatus(chess: Chess): GameStatus {
   if (chess.isInsufficientMaterial()) {
     return { result: 'draw', reason: 'Insufficient material' };
   }
-  if (chess.isThreefoldRepetition()) {
-    return { result: 'draw', reason: 'Threefold repetition' };
+  // FIDE (since 2014): fivefold repetition is an automatic draw; threefold
+  // repetition is only claimable, so it is not decided here.
+  if (repetitionCount >= 5) {
+    return { result: 'draw', reason: 'Fivefold repetition' };
   }
   if (chess.isDrawByFiftyMoves()) {
     return { result: 'draw', reason: 'Fifty-move rule' };
   }
-  if (chess.isDraw()) {
+  // chess.js's isDraw() also treats threefold repetition as a draw, so only
+  // fall through while the position has not yet occurred three times.
+  if (repetitionCount < 3 && chess.isDraw()) {
     return { result: 'draw', reason: 'Draw' };
   }
   return { result: 'ongoing', reason: '' };

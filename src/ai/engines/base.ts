@@ -32,7 +32,13 @@ export interface ChessEngine {
     fen: string,
     config: PlayerConfig,
     signal?: AbortSignal,
-    onInfo?: (info: EngineSearchInfo) => void
+    onInfo?: (info: EngineSearchInfo) => void,
+    /**
+     * Played moves in UCI notation ("e2e4", "e7e8q") from the initial
+     * position. Engines without a FEN parser (e.g. Sunfish) rebuild the
+     * position from this list; FEN-based engines ignore it.
+     */
+    historyUci?: string[]
   ): Promise<EngineSearchResult>;
   terminate(): void;
   isReady(): boolean;
@@ -72,6 +78,10 @@ export class EngineManager {
       case 'stockfish':
         const { StockfishEngine } = await import('./stockfish');
         engine = new StockfishEngine();
+        break;
+      case 'sunfish':
+        const { SunfishEngine } = await import('./sunfish');
+        engine = new SunfishEngine();
         break;
       case 'fallback':
         const { FallbackEngine } = await import('./fallback');

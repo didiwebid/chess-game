@@ -69,6 +69,7 @@ const ENGINE_SETTING_FIELDS: Record<ProviderType, readonly EngineSettingField[]>
   stockfish: ['depth', 'movetimeMs', 'skillLevel', 'uciOptions'],
   lozza: ['depth', 'movetimeMs', 'threads', 'hash'],
   tonnetto: ['depth', 'movetimeMs'],
+  sunfish: ['depth', 'movetimeMs'],
   fallback: [],
 };
 
@@ -326,6 +327,7 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                 <option value="stockfish">Stockfish</option>
                 <option value="lozza">Lozza</option>
                 <option value="tonnetto">Tonnetto</option>
+                <option value="sunfish">Sunfish (lightweight)</option>
                 <option value="fallback">Fallback (deterministic)</option>
               </select>
             </label>
@@ -465,7 +467,7 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                       <input
                         type="number"
                         min={1}
-                        max={draft.providerType === 'lozza' ? 4 : draft.providerType === 'tonnetto' ? 3 : 50}
+                        max={draft.providerType === 'lozza' ? 4 : draft.providerType === 'tonnetto' ? 3 : draft.providerType === 'sunfish' ? 12 : 50}
                         step={1}
                         value={draft.depth}
                         onChange={(event) => update({ depth: Number(event.target.value) })}
@@ -477,7 +479,9 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                         ? 'Lozza is capped at depth 4 for speed'
                         : draft.providerType === 'tonnetto'
                           ? 'Tonnetto is capped at depth 3 for speed'
-                          : '1 = blitz, 20 = standard, 50 = deep analysis'}
+                          : draft.providerType === 'sunfish'
+                            ? 'Sunfish is capped at depth 12; shallow play, very fast'
+                            : '1 = blitz, 20 = standard, 50 = deep analysis'}
                     </small>
                   </label>
                   <label className="field">
@@ -614,7 +618,11 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                 value={draft.maxTokens}
                 onChange={(event) => update({ maxTokens: Number(event.target.value) })}
               />
-              <small>Room for the move, reasoning, and JSON.</small>
+              <small>
+                Room for the move, reasoning, and JSON. Strong models can
+                produce long deep analysis — raise it if responses get cut
+                off.
+              </small>
             </label>
           </div>
           <div className="form-grid two-col">
