@@ -4,6 +4,7 @@ import {
   FileText,
   Flag,
   FolderOpen,
+  Github,
   Handshake,
   Plus,
   Save,
@@ -74,6 +75,16 @@ export function Toolbar({
           <span className="brand-name">GAMBIT</span>
           <span className="brand-sub">Local chess table</span>
         </div>
+        <a
+          className="project-link"
+          href="https://github.com/didiwebid/chess-game"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View source on GitHub"
+        >
+          <Github size={17} />
+          <span>Source</span>
+        </a>
       </div>
 
       <div className={`match-chip ${gameOver ? 'is-final' : ''}`}>

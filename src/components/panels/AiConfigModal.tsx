@@ -14,13 +14,14 @@ import {
 import { Modal } from '../ui/Modal';
 import { Toggle } from '../ui/Toggle';
 import { useChessStore } from '../../store/chessStore';
-import type { Color, PersonaPreset, PlayerConfig } from '../../types/chess';
+import type { Color, PersonaPreset, PlayerConfig, ProviderType } from '../../types/chess';
 import { PERSONA_LABELS } from '../../ai/prompts';
 import { estimateThreadMemoryTokens } from '../../ai/contextManager';
 import { testAiConnection } from '../../ai/client';
 import { abortAiTurn } from '../../ai/orchestrator';
 import { formatCount } from '../../hooks/useElapsed';
 import { maskApiKey } from '../../persistence/apiKeys';
+import { DEFAULT_BASE_URL, DEFAULT_MODEL } from '../../store/defaults';
 
 interface AiConfigModalProps {
   color: Color;
@@ -33,15 +34,6 @@ type TestState =
   | { status: 'success'; message: string }
   | { status: 'error'; message: string };
 
-const PERSONAS: PersonaPreset[] = [
-  'positional',
-  'aggressive',
-  'tactical',
-  'solid',
-  'beginner',
-  'custom',
-];
-
 function normalizeBaseUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
@@ -51,6 +43,15 @@ function normalizeBaseUrl(raw: string): string {
   }
   return `https://${trimmed}`;
 }
+
+const PERSONAS: PersonaPreset[] = [
+  'positional',
+  'aggressive',
+  'tactical',
+  'solid',
+  'beginner',
+  'custom',
+];
 
 export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
   const player = useChessStore((state) => state.players[color]);
@@ -107,32 +108,62 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
       setFormError('Give this player a name.');
       return null;
     }
-    const baseUrl = normalizeBaseUrl(draft.baseUrl);
-    if (!baseUrl) {
-      setFormError('Add an API base URL.');
-      return null;
-    }
-    try {
-      const parsed = new URL(baseUrl);
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        setFormError('The API URL must use http:// or https://.');
+
+    if (draft.providerType === 'openai') {
+      const baseUrl = normalizeBaseUrl(draft.baseUrl);
+      if (!baseUrl) {
+        setFormError('Add an API base URL.');
         return null;
       }
-    } catch {
-      setFormError('That API base URL is not valid.');
-      return null;
+      try {
+        const parsed = new URL(baseUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          setFormError('The API URL must use http:// or https://.');
+          return null;
+        }
+      } catch {
+        setFormError('That API base URL is not valid.');
+        return null;
+      }
+      if (!draft.model.trim()) {
+        setFormError('Add a model name.');
+        return null;
+      }
+      return {
+        ...draft,
+        providerType: 'openai',
+        baseUrl,
+        model: draft.model.trim(),
+        apiKey: draft.apiKey.trim(),
+        timeoutMs: Math.max(5_000, Math.min(180_000, draft.timeoutMs)),
+      };
+    } else {
+      // Chess engines - validate engine-specific fields
+      const engineFields = {
+        depth: Math.max(1, Math.min(50, draft.depth ?? 20)),
+        movetimeMs: Math.max(100, Math.min(30000, draft.movetimeMs ?? 3000)),
+        skillLevel: Math.max(0, Math.min(20, draft.skillLevel ?? 20)),
+        luckLevel: Math.max(0, Math.min(20, draft.luckLevel ?? 0)),
+        threads: Math.max(1, Math.min(16, draft.threads ?? 1)),
+        hash: Math.max(16, Math.min(1024, draft.hash ?? 256)),
+        nnCache: Math.max(16, Math.min(1024, draft.nnCache ?? 200)),
+        uciOptions: draft.uciOptions ?? {},
+      };
+
+      return {
+        ...draft,
+        providerType: draft.providerType,
+        depth: engineFields.depth,
+        movetimeMs: engineFields.movetimeMs,
+        skillLevel: engineFields.skillLevel,
+        luckLevel: engineFields.luckLevel,
+        threads: engineFields.threads,
+        hash: engineFields.hash,
+        nnCache: engineFields.nnCache,
+        uciOptions: engineFields.uciOptions,
+        timeoutMs: Math.max(5_000, Math.min(180_000, draft.timeoutMs)),
+      };
     }
-    if (!draft.model.trim()) {
-      setFormError('Add a model name.');
-      return null;
-    }
-    return {
-      ...draft,
-      baseUrl,
-      model: draft.model.trim(),
-      apiKey: draft.apiKey.trim(),
-      timeoutMs: Math.max(5_000, Math.min(180_000, draft.timeoutMs)),
-    };
   };
 
   const handleTest = async () => {
@@ -235,96 +266,306 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
         <section className="config-section">
           <div className="config-section-title">
             <div>
-              <p className="eyebrow">Connection</p>
-              <h3>OpenAI-compatible endpoint</h3>
+              <p className="eyebrow">Provider</p>
+              <h3>AI engine</h3>
             </div>
-            <span className="config-mini-tag">Browser → provider</span>
-          </div>
-          <div className="form-grid">
-            <label className="field">
-              <span>Base URL</span>
-              <input
-                type="url"
-                value={draft.baseUrl}
-                onChange={(event) => update({ baseUrl: event.target.value })}
-                placeholder="https://api.openai.com/v1"
-                spellCheck={false}
-                autoCapitalize="none"
-              />
-              <small>Works with OpenAI, OpenRouter, DeepSeek, or local Ollama.</small>
-            </label>
+            <span className="config-mini-tag">{draft.providerType === 'openai' ? 'API' : 'Local engine'}</span>
           </div>
           <div className="form-grid two-col">
             <label className="field">
-              <span>Model</span>
-              <input
-                type="text"
-                value={draft.model}
-                onChange={(event) => update({ model: event.target.value })}
-                placeholder="gpt-4o-mini"
-                spellCheck={false}
-                autoCapitalize="none"
-              />
+              <span>Provider</span>
+              <select
+                value={draft.providerType}
+                onChange={(event) => {
+                  update({ providerType: event.target.value as ProviderType });
+                  // Reset fields when switching provider
+                  if (event.target.value === 'openai') {
+                    update({
+                      baseUrl: DEFAULT_BASE_URL,
+                      model: DEFAULT_MODEL,
+                      apiKey: '',
+                    });
+                  } else {
+                    update({
+                      depth: 20,
+                      movetimeMs: 3000,
+                      skillLevel: 20,
+                      luckLevel: 0,
+                      threads: 1,
+                      hash: 256,
+                      nnCache: 200,
+                      uciOptions: {},
+                    });
+                  }
+                }}
+              >
+                <option value="openai">OpenAI-compatible API</option>
+                <option value="lozza">Lozza</option>
+                <option value="tonnetto">Tonnetto</option>
+                <option value="fallback">Fallback (deterministic)</option>
+              </select>
             </label>
-            <label className="field">
-              <span>
-                API key
-                {draft.apiKey ? <em className="field-badge">stored locally</em> : null}
-              </span>
-              <input
-                type="password"
-                value={draft.apiKey}
-                onChange={(event) => update({ apiKey: event.target.value })}
-                placeholder="sk-…"
-                autoComplete="new-password"
-                spellCheck={false}
-              />
-              <small>
-                {draft.apiKey
-                  ? `Masked key ending ${maskApiKey(draft.apiKey)} · stored only in this browser.`
-                  : 'Optional for local endpoints. Never written to save files or PGN.'}
-              </small>
-            </label>
-          </div>
-
-          <div className="test-connection-row">
-            <button
-              type="button"
-              className="secondary-button small"
-              onClick={handleTest}
-              disabled={test.status === 'loading'}
-            >
-              {test.status === 'loading' ? (
-                <LoaderCircle size={14} className="spin" />
-              ) : (
-                <PlugZap size={14} />
-              )}
-              {test.status === 'loading' ? 'Testing…' : 'Test connection'}
-            </button>
-            {test.status === 'success' ? (
-              <span className="test-result success">
-                <CircleCheck size={14} />
-                {test.message}
-              </span>
-            ) : null}
-            {test.status === 'error' ? (
-              <span className="test-result error">
-                <CircleAlert size={14} />
-                {test.message}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="security-note">
-            <ShieldCheck size={15} />
-            <p>
-              Requests are sent directly from your browser to this URL. The provider must
-              permit cross-origin requests. Anyone with access to this browser profile can
-              read the stored key.
-            </p>
+            <div className="field">
+              <span>Timeout (sec)</span>
+              <div className="input-with-suffix">
+                <input
+                  type="number"
+                  min={5}
+                  max={180}
+                  step={1}
+                  value={Math.round(draft.timeoutMs / 1000)}
+                  onChange={(event) =>
+                    update({ timeoutMs: Number(event.target.value) * 1000 })
+                  }
+                />
+                <span>sec</span>
+              </div>
+            </div>
           </div>
         </section>
 
+        {draft.providerType === 'openai' ? (
+          <section className="config-section">
+            <div className="config-section-title">
+              <div>
+                <p className="eyebrow">Connection</p>
+                <h3>OpenAI-compatible endpoint</h3>
+              </div>
+              <span className="config-mini-tag">Browser → provider</span>
+            </div>
+            <div className="form-grid">
+              <label className="field">
+                <span>Base URL</span>
+                <input
+                  type="url"
+                  value={draft.baseUrl}
+                  onChange={(event) => update({ baseUrl: event.target.value })}
+                  placeholder="https://api.openai.com/v1"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                />
+                <small>Works with OpenAI, OpenRouter, DeepSeek, or local Ollama.</small>
+              </label>
+            </div>
+            <div className="form-grid two-col">
+              <label className="field">
+                <span>Model</span>
+                <input
+                  type="text"
+                  value={draft.model}
+                  onChange={(event) => update({ model: event.target.value })}
+                  placeholder="gpt-4o-mini"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                />
+              </label>
+              <label className="field">
+                <span>
+                  API key
+                  {draft.apiKey ? <em className="field-badge">stored locally</em> : null}
+                </span>
+                <input
+                  type="password"
+                  value={draft.apiKey}
+                  onChange={(event) => update({ apiKey: event.target.value })}
+                  placeholder="sk-…"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                />
+                <small>
+                  {draft.apiKey
+                    ? `Masked key ending ${maskApiKey(draft.apiKey)} · stored only in this browser.`
+                    : 'Optional for local endpoints. Never written to save files or PGN.'}
+                </small>
+              </label>
+            </div>
+
+            <div className="test-connection-row">
+              <button
+                type="button"
+                className="secondary-button small"
+                onClick={handleTest}
+                disabled={test.status === 'loading'}
+              >
+                {test.status === 'loading' ? (
+                  <LoaderCircle size={14} className="spin" />
+                ) : (
+                  <PlugZap size={14} />
+                )}
+                {test.status === 'loading' ? 'Testing…' : 'Test connection'}
+              </button>
+              {test.status === 'success' ? (
+                <span className="test-result success">
+                  <CircleCheck size={14} />
+                  {test.message}
+                </span>
+              ) : null}
+              {test.status === 'error' ? (
+                <span className="test-result error">
+                  <CircleAlert size={14} />
+                  {test.message}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="security-note">
+              <ShieldCheck size={15} />
+              <p>
+                Requests are sent directly from your browser to this URL. The provider must
+                permit cross-origin requests. Anyone with access to this browser profile can
+                read the stored key.
+              </p>
+            </div>
+          </section>
+        ) : (
+          <section className="config-section">
+            <div className="config-section-title">
+              <div>
+                <p className="eyebrow">Engine</p>
+                <h3>Chess engine settings</h3>
+              </div>
+            </div>
+            <div className="form-grid two-col">
+              <label className="field">
+                <span>Search depth</span>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    step={1}
+                    value={draft.depth}
+                    onChange={(event) => update({ depth: Number(event.target.value) })}
+                  />
+                  <span>plies</span>
+                </div>
+                <small>1 = blitz, 20 = standard, 50 = deep analysis</small>
+              </label>
+              <label className="field">
+                <span>Time per move (ms)</span>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    min={100}
+                    max={30000}
+                    step={100}
+                    value={draft.movetimeMs}
+                    onChange={(event) => update({ movetimeMs: Number(event.target.value) })}
+                  />
+                  <span>ms</span>
+                </div>
+                <small>Overrides depth if set. 3000 = 3 seconds</small>
+              </label>
+            </div>
+            <div className="form-grid two-col">
+              <label className="field">
+                <span>Skill level</span>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={1}
+                    value={draft.skillLevel}
+                    onChange={(event) => update({ skillLevel: Number(event.target.value) })}
+                  />
+                  <span>level</span>
+                </div>
+                <small>0 = weakest, 20 = strongest</small>
+              </label>
+              <label className="field">
+                <span>Luck level</span>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={1}
+                    value={draft.luckLevel}
+                    onChange={(event) => update({ luckLevel: Number(event.target.value) })}
+                  />
+                  <span>level</span>
+                </div>
+                <small>0 = deterministic, 20 = maximum luck</small>
+              </label>
+            </div>
+            <div className="form-grid two-col">
+              <label className="field">
+                <span>Threads</span>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    min={1}
+                    max={16}
+                    step={1}
+                    value={draft.threads}
+                    onChange={(event) => update({ threads: Number(event.target.value) })}
+                  />
+                  <span>threads</span>
+                </div>
+                <small>CPU threads for search</small>
+              </label>
+              <label className="field">
+                <span>Hash table (MB)</span>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    min={16}
+                    max={1024}
+                    step={16}
+                    value={draft.hash}
+                    onChange={(event) => update({ hash: Number(event.target.value) })}
+                  />
+                  <span>MB</span>
+                </div>
+                <small>Memory for transposition table</small>
+              </label>
+            </div>
+            <div className="form-grid two-col">
+              <label className="field">
+                <span>NN Cache (MB)</span>
+                <div className="input-with-suffix">
+                  <input
+                    type="number"
+                    min={16}
+                    max={1024}
+                    step={16}
+                    value={draft.nnCache}
+                    onChange={(event) => update({ nnCache: Number(event.target.value) })}
+                  />
+                  <span>MB</span>
+                </div>
+                <small>Neural network cache for Lc0</small>
+              </label>
+              <label className="field">
+                <span>UCI Options</span>
+                <small>Advanced engine-specific options</small>
+              </label>
+            </div>
+            <div className="form-grid">
+              <label className="field">
+                <span>UCI Options JSON</span>
+                <small>Key-value pairs for engine configuration</small>
+              </label>
+              <textarea
+                rows={3}
+                value={JSON.stringify(draft.uciOptions, null, 2)}
+                onChange={(event) => {
+                  try {
+                    const parsed = JSON.parse(event.target.value);
+                    update({ uciOptions: parsed });
+                  } catch (e) {
+                    update({ uciOptions: {} });
+                  }
+                }}
+                placeholder='{"Threads": 2, "Hash": 512}'
+                spellCheck={false}
+              />
+            </div>
+          </section>
+        )}
+
+        {draft.providerType === 'openai' && (<>
         <section className="config-section">
           <div className="config-section-title">
             <div>
@@ -546,6 +787,7 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
             </button>
           </div>
         </section>
+        </>)}
 
         {formError ? (
           <div className="form-error" role="alert">

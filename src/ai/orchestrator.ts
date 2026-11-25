@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import type { Color, PlayerConfig } from '../types/chess';
+import type { Color, ChatMessage, PlayerConfig } from '../types/chess';
 import { useChessStore } from '../store/chessStore';
 import {
   buildCompressionMessages,
@@ -20,6 +20,7 @@ import {
 } from './client';
 import { chooseFallbackMove } from '../engine/fallback';
 import { normalizeMoveInput } from '../engine/chessUtils';
+import { EngineManager } from './engines';
 
 const activeRequests = new Map<Color, AbortController>();
 const MAX_ATTEMPTS = 3;
@@ -167,115 +168,121 @@ export async function requestAiTurn(color: Color): Promise<void> {
 
   try {
     let chess: Chess;
+    let messages: ChatMessage[] = [];
+    let legalMoves: string[] = [];
+    let currentUser: string = '';
     try {
       chess = new Chess(requestFen);
     } catch {
       throw new Error('The current position is invalid.');
     }
 
-    if (!config.baseUrl.trim() || !config.model.trim()) {
-      throw new AiRequestError(
-        'Finish this AI player’s endpoint settings before it can move.',
-      );
-    }
-
-    const legalMoves = chess.moves();
-    if (legalMoves.length === 0) {
-      finishThinking();
-      return;
-    }
-
-    const fullMoveNumber = Math.floor(initial.moves.length / 2) + 1;
-    const lastSan = initial.moves.at(-1)?.san ?? null;
-    const recentMoves = initial.moves
-      .slice(-Math.max(12, Math.min(30, config.context.keepLastNPlies)))
-      .map((move) => move.san);
-    const systemPrompt = buildSystemPrompt(player, opponent, color, config);
-
-    const buildCurrentUser = (summary: string) =>
-      buildTurnMessage({
-        fen: requestFen,
-        color,
-        moveNumber: fullMoveNumber,
-        lastMoveSan: lastSan,
-        legalMoves,
-        recentMoves,
-        summary,
-      });
-
-    let thread = useChessStore.getState().threads[color];
-    let currentUser = buildCurrentUser(thread.summary);
-    let messages = threadMessages(thread, systemPrompt, currentUser);
-    let estimatedTokens = estimateMessageTokens(messages);
-    const contextBudget = config.context.maxTokens;
-    const threshold =
-      contextBudget * Math.min(0.98, Math.max(0.5, config.context.thresholdRatio));
-
-    if (estimatedTokens >= threshold) {
-      const keep = config.context.keepLastNPlies;
-      const cutoffPly = Math.max(0, initial.moves.length - keep);
-      if (
-        cutoffPly > thread.summaryThroughPly &&
-        initial.moves.length > 0
-      ) {
-        const oldMoves = initial.moves
-          .slice(thread.summaryThroughPly, cutoffPly)
-          .map((move) => move.san);
-        if (oldMoves.length > 0) {
-          const summary = await summarizeOldMoves({
-            config,
-            oldMoves,
-            fen: requestFen,
-            existingSummary: thread.summary,
-            signal,
-          });
-          if (!isStillActive(color, requestVersion, requestFen, signal)) return;
-
-          thread = {
-            summary,
-            summaryThroughPly: cutoffPly,
-            turns: thread.turns.filter((turn) => turn.ply > cutoffPly),
-          };
-          useChessStore.getState().setThread(color, thread);
-          currentUser = buildCurrentUser(thread.summary);
-          messages = threadMessages(thread, systemPrompt, currentUser);
-          estimatedTokens = estimateMessageTokens(messages);
-        }
+    // Handle chess engines vs API providers
+    if (config.providerType === 'openai') {
+      if (!config.baseUrl.trim() || !config.model.trim()) {
+        throw new AiRequestError(
+          'Finish this AI player’s endpoint settings before it can move.',
+        );
       }
 
-      // Emergency compression: if the recent prompts themselves still exceed
-      // the budget, discard the oldest verbatim turns before touching the
-      // summary. The latest exchanges are the most useful for continuity.
-      if (estimatedTokens >= threshold && thread.turns.length > 0) {
-        let turns = [...thread.turns];
-        while (turns.length > 0 && estimatedTokens >= threshold * 0.92) {
-          turns = turns.slice(1);
-          const testThread = { ...thread, turns };
-          estimatedTokens = estimateMessageTokens(
-            threadMessages(testThread, systemPrompt, currentUser),
-          );
-        }
-        if (turns.length !== thread.turns.length) {
-          thread = { ...thread, turns };
-          currentUser = buildCurrentUser(thread.summary);
-          useChessStore.getState().setThread(color, thread);
-          messages = threadMessages(thread, systemPrompt, currentUser);
-        }
+      legalMoves = chess.moves();
+      if (legalMoves.length === 0) {
+        finishThinking();
+        return;
       }
 
-      // Last resort: cap the stored narrative itself.
-      if (estimatedTokens >= contextBudget) {
-        const overhead =
-          estimateTokens(systemPrompt) + estimateTokens(currentUser) + 32;
-        const availableChars = Math.max(200, (contextBudget - overhead) * 4);
-        if (thread.summary.length > availableChars) {
-          thread = {
-            ...thread,
-            summary: `${thread.summary.slice(0, availableChars)}…`,
-          };
-          currentUser = buildCurrentUser(thread.summary);
-          useChessStore.getState().setThread(color, thread);
-          messages = threadMessages(thread, systemPrompt, currentUser);
+      const fullMoveNumber = Math.floor(initial.moves.length / 2) + 1;
+      const lastSan = initial.moves.at(-1)?.san ?? null;
+      const recentMoves = initial.moves
+        .slice(-Math.max(12, Math.min(30, config.context.keepLastNPlies)))
+        .map((move) => move.san);
+      const systemPrompt = buildSystemPrompt(player, opponent, color, config);
+
+      const buildCurrentUser = (summary: string) =>
+        buildTurnMessage({
+          fen: requestFen,
+          color,
+          moveNumber: fullMoveNumber,
+          lastMoveSan: lastSan,
+          legalMoves,
+          recentMoves,
+          summary,
+        });
+
+      let thread = useChessStore.getState().threads[color];
+      let currentUser = buildCurrentUser(thread.summary);
+      messages = threadMessages(thread, systemPrompt, currentUser);
+      let estimatedTokens = estimateMessageTokens(messages);
+      const contextBudget = config.context.maxTokens;
+      const threshold =
+        contextBudget * Math.min(0.98, Math.max(0.5, config.context.thresholdRatio));
+
+      if (estimatedTokens >= threshold) {
+        const keep = config.context.keepLastNPlies;
+        const cutoffPly = Math.max(0, initial.moves.length - keep);
+        if (
+          cutoffPly > thread.summaryThroughPly &&
+          initial.moves.length > 0
+        ) {
+          const oldMoves = initial.moves
+            .slice(thread.summaryThroughPly, cutoffPly)
+            .map((move) => move.san);
+          if (oldMoves.length > 0) {
+            const summary = await summarizeOldMoves({
+              config,
+              oldMoves,
+              fen: requestFen,
+              existingSummary: thread.summary,
+              signal,
+            });
+            if (!isStillActive(color, requestVersion, requestFen, signal)) return;
+
+            thread = {
+              summary,
+              summaryThroughPly: cutoffPly,
+              turns: thread.turns.filter((turn) => turn.ply > cutoffPly),
+            };
+            useChessStore.getState().setThread(color, thread);
+            currentUser = buildCurrentUser(thread.summary);
+            messages = threadMessages(thread, systemPrompt, currentUser);
+            estimatedTokens = estimateMessageTokens(messages);
+          }
+        }
+
+        // Emergency compression: if the recent prompts themselves still exceed
+        // the budget, discard the oldest verbatim turns before touching the
+        // summary. The latest exchanges are the most useful for continuity.
+        if (estimatedTokens >= threshold && thread.turns.length > 0) {
+          let turns = [...thread.turns];
+          while (turns.length > 0 && estimatedTokens >= threshold * 0.92) {
+            turns = turns.slice(1);
+            const testThread = { ...thread, turns };
+            estimatedTokens = estimateMessageTokens(
+              threadMessages(testThread, systemPrompt, currentUser),
+            );
+          }
+          if (turns.length !== thread.turns.length) {
+            thread = { ...thread, turns };
+            currentUser = buildCurrentUser(thread.summary);
+            useChessStore.getState().setThread(color, thread);
+            messages = threadMessages(thread, systemPrompt, currentUser);
+          }
+        }
+
+        // Last resort: cap the stored narrative itself.
+        if (estimatedTokens >= contextBudget) {
+          const overhead =
+            estimateTokens(systemPrompt) + estimateTokens(currentUser) + 32;
+          const availableChars = Math.max(200, (contextBudget - overhead) * 4);
+          if (thread.summary.length > availableChars) {
+            thread = {
+              ...thread,
+              summary: `${thread.summary.slice(0, availableChars)}…`,
+            };
+            currentUser = buildCurrentUser(thread.summary);
+            useChessStore.getState().setThread(color, thread);
+            messages = threadMessages(thread, systemPrompt, currentUser);
+          }
         }
       }
     }
@@ -287,104 +294,169 @@ export async function requestAiTurn(color: Color): Promise<void> {
       if (!isStillActive(color, requestVersion, requestFen, signal)) return;
 
       useChessStore.getState().setStream(color, '', '');
-      let result;
-      try {
-        result = await requestChatCompletion({
-          config,
-          messages,
-          signal,
-          onDelta: ({ content, reasoning }) => {
-            useChessStore.getState().setStream(color, content, reasoning);
-          },
-        });
-      } catch (error) {
-        if (signal.aborted || abortableError(error)) return;
-        const message =
-          error instanceof Error ? error.message : 'The AI request failed.';
-        lastFailure = message;
-        const retryable =
-          error instanceof AiRequestError ? error.retryable : true;
-        if (!retryable || attempt === MAX_ATTEMPTS) break;
+
+      if (config.providerType === 'openai') {
+        let result;
         try {
-          await abortableSleep(320 * 2 ** (attempt - 1), signal);
-        } catch (sleepError) {
-          if (abortableError(sleepError)) return;
-          throw sleepError;
+          result = await requestChatCompletion({
+            config,
+            messages,
+            signal,
+            onDelta: ({ content, reasoning }) => {
+              useChessStore.getState().setStream(color, content, reasoning);
+            },
+          });
+        } catch (error) {
+          if (signal.aborted || abortableError(error)) return;
+          const message =
+            error instanceof Error ? error.message : 'The AI request failed.';
+          lastFailure = message;
+          const retryable =
+            error instanceof AiRequestError ? error.retryable : true;
+          if (!retryable || attempt === MAX_ATTEMPTS) break;
+          try {
+            await abortableSleep(320 * 2 ** (attempt - 1), signal);
+          } catch (sleepError) {
+            if (abortableError(sleepError)) return;
+            throw sleepError;
+          }
+          continue;
         }
-        continue;
-      }
 
-      if (!isStillActive(color, requestVersion, requestFen, signal)) return;
-
-      rawAssistantContent = result.content.trim();
-      const parsed = parseAssistantMove(result.content);
-      if (!parsed.ok) {
-        lastFailure = parsed.error;
-        if (attempt === MAX_ATTEMPTS) break;
-        messages = [
-          ...messages,
-          { role: 'assistant', content: result.content || '(empty response)' },
-          {
-            role: 'user',
-            content: buildCorrectionMessage(null, legalMoves, parsed.error),
-          },
-        ];
-        continue;
-      }
-
-      const normalized = normalizeMoveInput(parsed.value.move, requestFen);
-      if (!normalized) {
-        lastFailure = `The AI proposed ${parsed.value.move}, which is not a legal move in this position.`;
-        if (attempt === MAX_ATTEMPTS) break;
-        messages = [
-          ...messages,
-          { role: 'assistant', content: result.content },
-          {
-            role: 'user',
-            content: buildCorrectionMessage(
-              parsed.value.move,
-              legalMoves,
-              'It is not in the legal move list.',
-            ),
-          },
-        ];
-        continue;
-      }
-
-      const elapsedMs = Date.now() - startedAt;
-      const commit = useChessStore.getState().commitAiMove(
-        color,
-        normalized,
-        {
-          provider: config.baseUrl,
-          model: config.model,
-          reasoning: parsed.value.reasoning,
-          confidence: parsed.value.confidence,
-          fallback: false,
-          elapsedMs,
-        },
-        requestVersion,
-        requestFen,
-      );
-
-      if (!commit.ok || !commit.record) {
         if (!isStillActive(color, requestVersion, requestFen, signal)) return;
-        lastFailure = commit.error ?? 'The move could not be applied.';
-        break;
-      }
 
-      useChessStore.getState().appendThreadTurn(color, {
-        ply: commit.record.ply,
-        user: currentUser,
-        assistant:
-          rawAssistantContent ||
-          JSON.stringify({
-            move: parsed.value.move,
+        rawAssistantContent = result.content.trim();
+        const parsed = parseAssistantMove(result.content);
+        if (!parsed.ok) {
+          lastFailure = parsed.error;
+          if (attempt === MAX_ATTEMPTS) break;
+          messages = [
+            ...messages,
+            { role: 'assistant', content: result.content || '(empty response)' },
+            {
+              role: 'user',
+              content: buildCorrectionMessage(null, legalMoves, parsed.error),
+            },
+          ];
+          continue;
+        }
+
+        const normalized = normalizeMoveInput(parsed.value.move, requestFen);
+        if (!normalized) {
+          lastFailure = `The AI proposed ${parsed.value.move}, which is not a legal move in this position.`;
+          if (attempt === MAX_ATTEMPTS) break;
+          messages = [
+            ...messages,
+            { role: 'assistant', content: result.content },
+            {
+              role: 'user',
+              content: buildCorrectionMessage(
+                parsed.value.move,
+                legalMoves,
+                'It is not in the legal move list.',
+              ),
+            },
+          ];
+          continue;
+        }
+
+        const elapsedMs = Date.now() - startedAt;
+        const commit = useChessStore.getState().commitAiMove(
+          color,
+          normalized,
+          {
+            provider: config.baseUrl,
+            model: config.model,
             reasoning: parsed.value.reasoning,
             confidence: parsed.value.confidence,
-          }),
-      });
-      return;
+            fallback: false,
+            elapsedMs,
+          },
+          requestVersion,
+          requestFen,
+        );
+
+        if (!commit.ok || !commit.record) {
+          if (!isStillActive(color, requestVersion, requestFen, signal)) return;
+          lastFailure = commit.error ?? 'The move could not be applied.';
+          break;
+        }
+
+        useChessStore.getState().appendThreadTurn(color, {
+          ply: commit.record.ply,
+          user: currentUser,
+          assistant:
+            rawAssistantContent ||
+            JSON.stringify({
+              move: parsed.value.move,
+              reasoning: parsed.value.reasoning,
+              confidence: parsed.value.confidence,
+            }),
+        });
+        return;
+      } else {
+        // Chess engine path
+        try {
+          const engine = await EngineManager.getInstance().getEngine(config.providerType);
+          const engineResult = await engine.search(requestFen, config, signal);
+          
+          if (!isStillActive(color, requestVersion, requestFen, signal)) return;
+          
+          const normalized = normalizeMoveInput(engineResult.move, requestFen);
+          if (!normalized) {
+            lastFailure = `The engine proposed ${engineResult.move}, which is not a legal move in this position.`;
+            if (attempt === MAX_ATTEMPTS) break;
+            continue;
+          }
+          
+          const elapsedMs = Date.now() - startedAt;
+          const commit = useChessStore.getState().commitAiMove(
+            color,
+            normalized,
+            {
+              provider: config.providerType,
+              model: config.providerType,
+              reasoning: `Depth ${engineResult.depth}, Eval ${engineResult.eval / 100}`,
+              confidence: 'high',
+              fallback: false,
+              elapsedMs,
+            },
+            requestVersion,
+            requestFen,
+          );
+
+          if (!commit.ok || !commit.record) {
+            if (!isStillActive(color, requestVersion, requestFen, signal)) return;
+            lastFailure = commit.error ?? 'The move could not be applied.';
+            break;
+          }
+
+          useChessStore.getState().appendThreadTurn(color, {
+            ply: commit.record.ply,
+            user: currentUser,
+            assistant: JSON.stringify({
+              move: engineResult.move,
+              reasoning: `Depth ${engineResult.depth}, Eval ${engineResult.eval / 100}`,
+              confidence: 'high',
+            }),
+          });
+          return;
+        } catch (error) {
+          if (signal.aborted || abortableError(error)) return;
+          const message =
+            error instanceof Error ? error.message : 'The engine request failed.';
+          lastFailure = message;
+          const retryable = true; // Chess engines can retry
+          if (!retryable || attempt === MAX_ATTEMPTS) break;
+          try {
+            await abortableSleep(320 * 2 ** (attempt - 1), signal);
+          } catch (sleepError) {
+            if (abortableError(sleepError)) return;
+            throw sleepError;
+          }
+          continue;
+        }
+      }
     }
 
     if (!isStillActive(color, requestVersion, requestFen, signal)) return;

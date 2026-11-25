@@ -6,6 +6,7 @@ import {
   FileText,
   Flag,
   FolderOpen,
+  Github,
   Handshake,
   Pause,
   Play,
@@ -284,6 +285,16 @@ export function GamePanel({
           <p>No account, server, or analytics. Only your configured AI provider receives a request.</p>
         </div>
       </div>
+
+      <a
+        className="project-link project-link--footer"
+        href="https://github.com/didiwebid/chess-game"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <Github size={14} />
+        <span>View source on GitHub</span>
+      </a>
     </div>
   );
 }

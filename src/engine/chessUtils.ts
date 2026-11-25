@@ -32,10 +32,6 @@ export function colorFromTurn(turn: 'w' | 'b'): Color {
   return turn === 'w' ? 'white' : 'black';
 }
 
-export function turnFromColor(color: Color): 'w' | 'b' {
-  return color === 'white' ? 'w' : 'b';
-}
-
 export function titleForColor(color: Color): string {
   return color === 'white' ? 'White' : 'Black';
 }
@@ -89,7 +85,7 @@ export function getCheckSquare(fen: string): Square | null {
   }
 }
 
-export function boardMaterial(fen: string): Record<Color, number> {
+function boardMaterial(fen: string): Record<Color, number> {
   const placement = fen.split(' ')[0] ?? '';
   const totals: Record<Color, number> = { white: 0, black: 0 };
   for (const char of placement) {
@@ -120,13 +116,6 @@ export function getCapturedPieces(
     }
   }
   return captured.sort((a, b) => PIECE_VALUES[b.piece] - PIECE_VALUES[a.piece]);
-}
-
-export function getCapturedValue(moves: MoveRecord[], byColor: Color): number {
-  return getCapturedPieces(moves, byColor).reduce(
-    (total, item) => total + PIECE_VALUES[item.piece],
-    0,
-  );
 }
 
 export function moveToRecord(
@@ -227,6 +216,3 @@ export function getGameResultLabel(status: GameStatus): string {
   return `${titleForColor(status.result)} wins · ${status.reason}`;
 }
 
-export function isTerminal(status: GameStatus): boolean {
-  return status.result !== 'ongoing';
-}

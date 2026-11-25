@@ -30,3 +30,6 @@ coverage/
 # Temporary files
 .tmp-*.mjs
 *.tmp
+
+# npm package artifacts
+*.tgz

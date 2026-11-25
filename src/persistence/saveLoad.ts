@@ -20,11 +20,12 @@ import type {
   SaveSlot,
   ThreadTurn,
 } from '../types/chess';
+import { validProviderType } from '../store/defaults';
 
-export const LAST_GAME_KEY = 'gambit.lastGame.v1';
-export const SAVES_KEY = 'gambit.saves.v1';
-export const SAVE_FORMAT = 'browser-chess-save';
-export const SAVE_VERSION = 1;
+const LAST_GAME_KEY = 'gambit.lastGame.v1';
+const SAVES_KEY = 'gambit.saves.v1';
+const SAVE_FORMAT = 'browser-chess-save';
+const SAVE_VERSION = 1;
 const MAX_MOVES = 1_000;
 const MAX_THREAD_TURNS = 200;
 
@@ -126,7 +127,7 @@ function serializedConfig(config: PlayerConfig): AIPlayerConfigPayload {
   };
 }
 
-export function serializeGame(): SaveFile {
+function serializeGame(): SaveFile {
   const state = useChessStore.getState();
   return {
     format: SAVE_FORMAT,
@@ -155,7 +156,7 @@ export function serializeGame(): SaveFile {
   };
 }
 
-export function downloadFile(
+function downloadFile(
   contents: string,
   filename: string,
   type: string,
@@ -297,6 +298,9 @@ function parseConfig(
   return sanitizeConfig({
     ...defaults,
     apiKey,
+    providerType: validProviderType(source.providerType)
+      ? source.providerType
+      : defaults.providerType,
     baseUrl: safeString(source.baseUrl, defaults.baseUrl, 2_000),
     model: safeString(source.model, defaults.model, 200),
     temperature: numberOr(source.temperature, defaults.temperature),
@@ -499,7 +503,7 @@ function snapshotToLoadedData(save: SaveFile): {
   };
 }
 
-export function restoreSnapshot(
+function restoreSnapshot(
   save: SaveFile,
   options: { announce?: boolean } = {},
 ): { ok: boolean; error?: string; missingKeys?: string[] } {
@@ -569,7 +573,7 @@ function parsePgnStatus(chess: Chess, headers: Record<string, string>): GameStat
   return { result: 'ongoing', reason: '' };
 }
 
-export function importPgnText(text: string): { ok: boolean; error?: string } {
+function importPgnText(text: string): { ok: boolean; error?: string } {
   if (!text.trim()) return { ok: false, error: 'The PGN file is empty.' };
   const chess = new Chess();
   try {
@@ -668,10 +672,3 @@ function isSaveFileShapeSafe(trimmed: string): boolean {
   }
 }
 
-export function getApiKeyStatusForColor(color: Color): {
-  saved: boolean;
-  hint: string;
-} {
-  const key = getApiKeys()[color];
-  return { saved: Boolean(key), hint: maskApiKey(key) };
-}

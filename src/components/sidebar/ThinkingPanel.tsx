@@ -172,7 +172,11 @@ export function ThinkingPanel({ onOpenConfig }: ThinkingPanelProps) {
             </div>
             <div className="thinking-live-meta">
               <span><Clock3 size={13} /> {formatElapsed(elapsed)}</span>
-              <span className="model-chip">{selectedPlayer.config.model || 'AI'}</span>
+              <span className="model-chip">
+                {selectedPlayer.config.providerType === 'openai'
+                  ? selectedPlayer.config.model || 'AI'
+                  : selectedPlayer.config.providerType.charAt(0).toUpperCase() + selectedPlayer.config.providerType.slice(1)}
+              </span>
             </div>
           </div>
 
@@ -181,7 +185,11 @@ export function ThinkingPanel({ onOpenConfig }: ThinkingPanelProps) {
           </div>
 
           <div className="thinking-live-footer">
-            <span>Streamed from your configured provider</span>
+            <span>
+              {selectedPlayer.config.providerType === 'openai'
+                ? 'Streamed from your configured provider'
+                : 'Local engine running in browser'}
+            </span>
             <button type="button" className="danger-subtle-button" onClick={stopThinking}>
               <CircleStop size={14} />
               Stop
@@ -256,7 +264,7 @@ export function ThinkingPanel({ onOpenConfig }: ThinkingPanelProps) {
               </div>
               <p className="last-thought-text">{selectedMove.reasoning}</p>
               <div className="last-thought-footer">
-                <span><Bot size={12} /> {selectedMove.model || selectedPlayer.config.model || 'AI'}</span>
+                <span><Bot size={12} /> {selectedMove.model || (selectedPlayer.config.providerType === 'openai' ? selectedPlayer.config.model : selectedPlayer.config.providerType.charAt(0).toUpperCase() + selectedPlayer.config.providerType.slice(1)) || 'AI'}</span>
                 {selectedMove.elapsedMs ? (
                   <span><Clock3 size={12} /> {formatElapsed(Math.round(selectedMove.elapsedMs / 1000))}</span>
                 ) : null}
@@ -276,31 +284,33 @@ export function ThinkingPanel({ onOpenConfig }: ThinkingPanelProps) {
             </div>
           ) : null}
 
-          <div className="memory-card">
-            <div className="memory-head">
-              <span><BrainCircuit size={14} /> AI memory</span>
-              <button type="button" onClick={() => onOpenConfig(selectedColor)}>
-                <Settings2 size={13} />
-                Manage
-              </button>
+          {selectedPlayer.config.providerType === 'openai' ? (
+            <div className="memory-card">
+              <div className="memory-head">
+                <span><BrainCircuit size={14} /> AI memory</span>
+                <button type="button" onClick={() => onOpenConfig(selectedColor)}>
+                  <Settings2 size={13} />
+                  Manage
+                </button>
+              </div>
+              <div className="memory-stats">
+                <span>{selectedThread.turns.length} stored exchanges</span>
+                <span>{summaryHasContent(selectedThread.summary) ? 'Summary active' : 'No summary'}</span>
+              </div>
+              <div className="usage-bar" aria-hidden="true">
+                <span style={{ width: `${Math.max(2, usagePercent)}%` }} />
+                <i
+                  style={{
+                    left: `${Math.round(selectedPlayer.config.context.thresholdRatio * 100)}%`,
+                  }}
+                />
+              </div>
+              <div className="memory-foot">
+                <span><Gauge size={12} /> ~{formatCount(memoryTokens)} tokens stored</span>
+                <span>{usagePercent}% of context</span>
+              </div>
             </div>
-            <div className="memory-stats">
-              <span>{selectedThread.turns.length} stored exchanges</span>
-              <span>{summaryHasContent(selectedThread.summary) ? 'Summary active' : 'No summary'}</span>
-            </div>
-            <div className="usage-bar" aria-hidden="true">
-              <span style={{ width: `${Math.max(2, usagePercent)}%` }} />
-              <i
-                style={{
-                  left: `${Math.round(selectedPlayer.config.context.thresholdRatio * 100)}%`,
-                }}
-              />
-            </div>
-            <div className="memory-foot">
-              <span><Gauge size={12} /> ~{formatCount(memoryTokens)} tokens stored</span>
-              <span>{usagePercent}% of context</span>
-            </div>
-          </div>
+          ) : null}
         </div>
       )}
     </div>

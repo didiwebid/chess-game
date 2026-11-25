@@ -1,7 +1,7 @@
 import { Chess } from 'chess.js';
 import type { PieceSymbol } from 'chess.js';
 import type { Color } from '../types/chess';
-import { PIECE_VALUES, colorFromTurn, opposite } from './chessUtils';
+import { PIECE_VALUES, colorFromTurn } from './chessUtils';
 
 const CENTER_BONUS: Record<string, number> = {
   d4: 0.28,
@@ -78,14 +78,3 @@ export function chooseFallbackMove(fen: string): string | null {
   return bestSan;
 }
 
-export function colorOfFallback(fen: string): Color | null {
-  try {
-    return colorFromTurn(new Chess(fen).turn());
-  } catch {
-    return null;
-  }
-}
-
-export function opponentOf(color: Color): Color {
-  return opposite(color);
-}
