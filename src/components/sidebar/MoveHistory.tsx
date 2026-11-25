@@ -142,6 +142,12 @@ export function MoveHistory() {
               {white.elapsedMs ? <span>{formatElapsed(Math.round(white.elapsedMs / 1000))}</span> : null}
             </div>
             <p>{white.reasoning}</p>
+            {white.pv && white.pv.length > 1 ? (
+              <div className="reasoning-pv">
+                <span className="reasoning-pv-label">Main line</span>
+                <span className="reasoning-pv-moves">{white.pv.join(' ')}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {black && expanded.has(black.ply) && showThinking && black.reasoning ? (
@@ -153,6 +159,12 @@ export function MoveHistory() {
               {black.elapsedMs ? <span>{formatElapsed(Math.round(black.elapsedMs / 1000))}</span> : null}
             </div>
             <p>{black.reasoning}</p>
+            {black.pv && black.pv.length > 1 ? (
+              <div className="reasoning-pv">
+                <span className="reasoning-pv-label">Main line</span>
+                <span className="reasoning-pv-moves">{black.pv.join(' ')}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>,

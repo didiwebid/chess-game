@@ -298,6 +298,7 @@ export const useChessStore = create<ChessStore>((set, get) => ({
           reasoning: saved.reasoning,
           confidence: saved.confidence,
           fallback: saved.fallback,
+          pv: saved.pv,
           elapsedMs: saved.elapsedMs,
         });
         record.ply = index + 1;

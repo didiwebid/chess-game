@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import type { PlayerConfig } from '../../types/chess';
-import { EngineSearchResult, ChessEngine } from './base';
+import { EngineSearchResult, EngineSearchInfo, ChessEngine } from './base';
 
 interface LozzaEngineInterface {
   postMessage: (cmd: string) => void;
@@ -24,7 +24,8 @@ export class LozzaEngine implements ChessEngine {
   async search(
     fen: string,
     config: PlayerConfig,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onInfo?: (info: EngineSearchInfo) => void
   ): Promise<EngineSearchResult> {
     const engine = await this.ensureEngine();
 
@@ -36,6 +37,7 @@ export class LozzaEngine implements ChessEngine {
     const startedAt = Date.now();
     let bestDepth = 0;
     let bestScore = 0;
+    let bestMate: number | undefined;
     let bestPv: string[] = [];
 
     // Set engine options
@@ -63,9 +65,22 @@ export class LozzaEngine implements ChessEngine {
         const msg = event.data;
         if (msg.startsWith('info')) {
           const parsed = this.parseInfoLine(msg);
-          if (parsed.depth !== undefined) bestDepth = parsed.depth;
-          if (parsed.score !== undefined) bestScore = parsed.score;
-          if (parsed.pv !== undefined) bestPv = parsed.pv;
+          if (parsed.multipv === undefined || parsed.multipv === 1) {
+            if (parsed.depth !== undefined) bestDepth = parsed.depth;
+            if (parsed.score !== undefined) bestScore = parsed.score;
+            if (parsed.mate !== undefined) bestMate = parsed.mate;
+            if (parsed.pv !== undefined) bestPv = parsed.pv;
+          }
+          if (onInfo) {
+            onInfo({
+              depth: parsed.depth,
+              eval: parsed.score,
+              mate: parsed.mate,
+              pv: parsed.pv,
+              nps: parsed.nps,
+              nodes: parsed.nodes,
+            });
+          }
         } else if (msg.startsWith('bestmove')) {
           window.clearTimeout(timer);
           engine.onmessage = null;
@@ -89,9 +104,10 @@ export class LozzaEngine implements ChessEngine {
 
             resolve({
               move: sanMove,
-              eval: bestScore,
+              eval: bestMate !== undefined ? (bestMate > 0 ? 20_000 - bestMate : -20_000 - bestMate) : bestScore,
               depth: bestDepth || depth,
               pv: bestPv,
+              mate: bestMate,
               time: Date.now() - startedAt,
               elapsedMs: Date.now() - startedAt,
             });
@@ -198,24 +214,48 @@ export class LozzaEngine implements ChessEngine {
     }
   }
 
-  private parseInfoLine(line: string): { depth?: number; score?: number; pv?: string[] } {
-    const result: { depth?: number; score?: number; pv?: string[] } = {};
+  private parseInfoLine(line: string): {
+    depth?: number;
+    score?: number;
+    mate?: number;
+    pv?: string[];
+    nps?: number;
+    nodes?: number;
+    multipv?: number;
+  } {
+    const result: {
+      depth?: number;
+      score?: number;
+      mate?: number;
+      pv?: string[];
+      nps?: number;
+      nodes?: number;
+      multipv?: number;
+    } = {};
 
     const depthMatch = line.match(/depth\s+(\d+)/);
     if (depthMatch) result.depth = parseInt(depthMatch[1], 10);
 
-    const scoreMatch = line.match(/score\s+(cp|mate)\s+(-?\d+)/);
-    if (scoreMatch) {
-      if (scoreMatch[1] === 'cp') {
-        result.score = parseInt(scoreMatch[2], 10);
-      } else {
-        const mateIn = parseInt(scoreMatch[2], 10);
-        result.score = mateIn > 0 ? 20000 - mateIn : -20000 - mateIn;
-      }
+    const mateMatch = line.match(/score\s+mate\s+(-?\d+)/);
+    if (mateMatch) {
+      result.mate = parseInt(mateMatch[1], 10);
+      result.score = result.mate > 0 ? 20_000 - result.mate : -20_000 - result.mate;
+    } else {
+      const scoreMatch = line.match(/score\s+cp\s+(-?\d+)/);
+      if (scoreMatch) result.score = parseInt(scoreMatch[1], 10);
     }
 
     const pvMatch = line.match(/pv\s+(.+)/);
     if (pvMatch) result.pv = pvMatch[1].split(' ');
+
+    const npsMatch = line.match(/nps\s+(\d+)/);
+    if (npsMatch) result.nps = parseInt(npsMatch[1], 10);
+
+    const nodesMatch = line.match(/nodes\s+(\d+)/);
+    if (nodesMatch) result.nodes = parseInt(nodesMatch[1], 10);
+
+    const multipvMatch = line.match(/multipv\s+(\d+)/);
+    if (multipvMatch) result.multipv = parseInt(multipvMatch[1], 10);
 
     return result;
   }

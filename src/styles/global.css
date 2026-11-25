@@ -1572,6 +1572,32 @@ h4 {
   overflow-wrap: anywhere;
 }
 
+.reasoning-pv {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.reasoning-pv-label {
+  flex: 0 0 auto;
+  color: var(--gold);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.reasoning-pv-moves {
+  color: var(--ivory-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
 .history-footer {
   flex: 0 0 auto;
   display: flex;

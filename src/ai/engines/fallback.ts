@@ -1,5 +1,5 @@
 import type { PlayerConfig } from '../../types/chess';
-import { EngineSearchResult, ChessEngine } from './base';
+import { EngineSearchResult, EngineSearchInfo, ChessEngine } from './base';
 import { chooseFallbackMove } from '../../engine/fallback';
 
 /**
@@ -16,7 +16,8 @@ export class FallbackEngine implements ChessEngine {
   async search(
     fen: string,
     _config: PlayerConfig,
-    _signal?: AbortSignal
+    _signal?: AbortSignal,
+    onInfo?: (info: EngineSearchInfo) => void
   ): Promise<EngineSearchResult> {
     const startedAt = Date.now();
     const move = chooseFallbackMove(fen);
@@ -25,7 +26,7 @@ export class FallbackEngine implements ChessEngine {
       throw new Error('Fallback engine could not find a legal move.');
     }
 
-    return {
+    const result: EngineSearchResult = {
       move,
       eval: 0,
       depth: 1,
@@ -33,6 +34,10 @@ export class FallbackEngine implements ChessEngine {
       time: Date.now() - startedAt,
       elapsedMs: Date.now() - startedAt,
     };
+    if (onInfo) {
+      onInfo({ depth: 1, pv: [move] });
+    }
+    return result;
   }
 
   terminate(): void {
