@@ -11,6 +11,8 @@ export type PersonaPreset =
   | 'beginner'
   | 'custom';
 
+export type ProviderType = 'openai' | 'lozza' | 'tonnetto' | 'fallback';
+
 export interface GameStatus {
   result: Result;
   reason: string;
@@ -23,9 +25,23 @@ export interface ContextConfig {
 }
 
 export interface PlayerConfig {
+  // API providers
   baseUrl: string;
   apiKey: string;
   model: string;
+  
+  // Chess engines
+  providerType: ProviderType;
+  depth?: number;         // 1-50
+  movetimeMs?: number;    // 100-30000
+  skillLevel?: number;    // 0-20 (Stockfish)
+  luckLevel?: number;     // 0-20 (Stockfish)
+  threads?: number;       // 1-16
+  hash?: number;          // MB (Stockfish/Lc0)
+  nnCache?: number;       // MB (Lc0)
+  uciOptions?: Record<string, string | number>; // Engine-specific options
+  
+  // Shared
   temperature: number;
   maxTokens: number;
   stream: boolean;

@@ -2,7 +2,7 @@ import type { Color } from '../types/chess';
 
 const API_KEYS_STORAGE_KEY = 'gambit.apiKeys.v1';
 
-export type ApiKeyMap = Record<Color, string>;
+type ApiKeyMap = Record<Color, string>;
 
 function emptyKeys(): ApiKeyMap {
   return { white: '', black: '' };
@@ -31,15 +31,6 @@ export function setApiKey(color: Color, key: string): void {
     window.localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(keys));
   } catch {
     // Storage can be unavailable in private or locked-down contexts.
-  }
-}
-
-export function clearApiKeys(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(API_KEYS_STORAGE_KEY);
-  } catch {
-    // No-op.
   }
 }
 

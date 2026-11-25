@@ -22,15 +22,7 @@ export function estimateThreadMemoryTokens(thread: AIThread): number {
   return total;
 }
 
-export interface ThreadCompressionResult {
-  thread: AIThread;
-  compressed: boolean;
-  newSummary?: string;
-  removedTurns: number;
-  cutoffPly: number;
-}
-
-export function extractJsonObject(raw: string): string | null {
+function extractJsonObject(raw: string): string | null {
   const withoutFence = raw
     .replace(/^\s*```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/i, '')

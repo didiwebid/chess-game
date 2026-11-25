@@ -135,3 +135,7 @@ Modern browsers with ES Module and CSS custom property support: Chrome 90+, Fire
 ## License
 
 MIT
+
+## Source Code
+
+The source code is available on GitHub: <a href="https://github.com/didiwebid/chess-game" target="_blank" rel="noopener noreferrer">https://github.com/didiwebid/chess-game</a>

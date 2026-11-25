@@ -114,13 +114,6 @@ Current FEN for reference: ${options.fen}`,
   ];
 }
 
-export function buildSummarySystemBlock(summary: string): ChatMessage {
-  return {
-    role: 'system',
-    content: `Earlier game summary (trustworthy factual context; the FEN and legal move list are always authoritative):\n${summary.trim()}`,
-  };
-}
-
 export const PERSONA_LABELS: Record<string, string> = {
   aggressive: 'Attacking',
   positional: 'Positional',

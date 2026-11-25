@@ -66,12 +66,12 @@ function buildFetchUrl(baseUrl: string, endpointPath: string): {
   };
 }
 
-export interface ChatDelta {
+interface ChatDelta {
   content: string;
   reasoning: string;
 }
 
-export interface ChatResult {
+interface ChatResult {
   content: string;
   reasoning: string;
   model?: string;
@@ -115,7 +115,7 @@ function chatEndpoint(baseUrl: string): {
   return buildFetchUrl(base, '/chat/completions');
 }
 
-export function modelsEndpoint(baseUrl: string): {
+function modelsEndpoint(baseUrl: string): {
   url: string;
   proxyHeaders: Record<string, string>;
 } {

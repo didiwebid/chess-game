@@ -90,7 +90,13 @@ export function PlayerPanel({
           <div className="player-eyebrow">
             <span>{color}</span>
             <span className="dot-separator" />
-            <span>{isAi ? player.config.model || 'AI player' : 'Human player'}</span>
+            <span>
+              {isAi ? (
+                player.config.providerType === 'openai'
+                  ? player.config.model || 'AI player'
+                  : player.config.providerType.charAt(0).toUpperCase() + player.config.providerType.slice(1)
+              ) : 'Human player'}
+            </span>
           </div>
           <div className="player-name-row">
             <h2>{player.name}</h2>

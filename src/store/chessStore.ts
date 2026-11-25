@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Chess } from 'chess.js';
-import type { Move, PieceSymbol, Square } from 'chess.js';
+import type { Move, Square } from 'chess.js';
 import type {
   AIThread,
   AiErrorInfo,
@@ -781,16 +781,3 @@ export function findPromotionCandidate(
   }
 }
 
-export function isLegalMove(
-  fen: string,
-  from: Square,
-  to: Square,
-  promotion?: PieceSymbol,
-): boolean {
-  try {
-    const chess = new Chess(fen);
-    return !!chess.move({ from, to, promotion });
-  } catch {
-    return false;
-  }
-}
