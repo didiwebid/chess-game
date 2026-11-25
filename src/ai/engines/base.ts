@@ -51,6 +51,10 @@ export class EngineManager {
         const { TonnettoEngine } = await import('./tonnetto');
         engine = new TonnettoEngine();
         break;
+      case 'stockfish':
+        const { StockfishEngine } = await import('./stockfish');
+        engine = new StockfishEngine();
+        break;
       case 'fallback':
         const { FallbackEngine } = await import('./fallback');
         engine = new FallbackEngine();

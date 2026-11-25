@@ -2,12 +2,12 @@
 
 A fully client-side, two-player chess game built with React, Vite, and TypeScript. Play Human vs Human, Human vs AI, or AI vs AI — all in your browser with no backend, no accounts, and no analytics.
 
-Each player slot can be independently configured as **Human** or **AI**. An AI seat can be powered by any OpenAI-compatible Chat Completions endpoint (OpenAI, OpenRouter, DeepSeek, local Ollama, etc.), or by a **local chess engine that runs entirely in the browser** — Lozza (WebAssembly), Tonnetto (Web Worker), or a deterministic Fallback engine. When using an API provider, reasoning streams live and context is managed with automatic compression. Games can be saved, loaded, and exported as PGN.
+Each player slot can be independently configured as **Human** or **AI**. An AI seat can be powered by any OpenAI-compatible Chat Completions endpoint (OpenAI, OpenRouter, DeepSeek, local Ollama, etc.), or by a **local chess engine that runs entirely in the browser** — Stockfish, Lozza, Tonnetto, or a deterministic Fallback engine. When using an API provider, reasoning streams live and context is managed with automatic compression. Games can be saved, loaded, and exported as PGN.
 
 ## Features
 
 - **Four play modes**: Human vs Human, Human vs AI, AI vs Human, AI vs AI
-- **Two AI backends**: Any OpenAI-compatible API endpoint, or a local in-browser chess engine (Lozza, Tonnetto, Fallback)
+- **Two AI backends**: Any OpenAI-compatible API endpoint, or a local in-browser chess engine (Stockfish, Lozza, Tonnetto, Fallback)
 - **Configurable AI**: Per-player provider URL, model, API key, temperature, streaming, persona, and context settings for API providers; depth, movetime, skill, threads, and hash for local engines
 - **Live reasoning**: AI thoughts stream in real-time on the player panel and Thinking tab
 - **Context management**: Automatic compression when the context window fills; memory clear and resume options
@@ -63,10 +63,11 @@ npm run typecheck
 ## Using AI Opponents
 
 1. Click the **gear icon** on a player panel to open AI settings
-2. Choose a **Provider**: an OpenAI-compatible API endpoint, or a local engine (Lozza, Tonnetto, or Fallback)
+2. Choose a **Provider**: an OpenAI-compatible API endpoint, or a local engine (Stockfish, Lozza, Tonnetto, or Fallback)
 3. Configure the provider:
    - **OpenAI-compatible API** — enter the base URL, model, and API key, then click **Test connection**
    - **Local engine** — set search depth, movetime, skill level, threads, and hash
+   - **Stockfish** — Skill level (0–20) controls strength; depth or movetime controls search effort
 4. Click **Save settings**
 5. Toggle the player to **AI** using the controller switch on their panel
 
@@ -86,6 +87,7 @@ Any OpenAI-compatible Chat Completions API:
 
 Run entirely in the browser — no API key, no network, no downloads:
 
+- **Stockfish** — UCI engine (Stockfish 10, asm.js build, GPLv3) running in a Web Worker; strongest local option. Skill level 0–20 via UCI `Skill Level`; depth or movetime search
 - **Lozza** — WebAssembly UCI engine; strong play, tuned for depth
 - **Tonnetto** — TypeScript engine running in a Web Worker; lightweight and fast
 - **Fallback** — deterministic one-ply evaluator; dependency-free and instant
@@ -116,6 +118,8 @@ src/
   ai/orchestrator.ts            # Per-turn flow, retries, fallback, abort
   ai/engines/                   # Local chess engine adapters
     base.ts                     # EngineManager + shared ChessEngine interface
+    stockfish.ts                # Stockfish (UCI Web Worker) engine wrapper
+    stockfish-worker.ts         # Stockfish worker entry (loads stockfish/stockfish.js)
     lozza.ts                    # Lozza (WebAssembly) engine wrapper
     tonnetto.ts                 # Tonnetto (Web Worker) engine wrapper
     fallback.ts                 # Deterministic fallback engine

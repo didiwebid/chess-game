@@ -11,7 +11,7 @@ export type PersonaPreset =
   | 'beginner'
   | 'custom';
 
-export type ProviderType = 'openai' | 'lozza' | 'tonnetto' | 'fallback';
+export type ProviderType = 'openai' | 'lozza' | 'tonnetto' | 'stockfish' | 'fallback';
 
 export interface GameStatus {
   result: Result;
