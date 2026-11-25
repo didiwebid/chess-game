@@ -21,7 +21,7 @@ import { testAiConnection } from '../../ai/client';
 import { abortAiTurn } from '../../ai/orchestrator';
 import { formatCount } from '../../hooks/useElapsed';
 import { maskApiKey } from '../../persistence/apiKeys';
-import { DEFAULT_BASE_URL, DEFAULT_MODEL } from '../../store/defaults';
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, ENGINE_DEFAULT_DEPTH } from '../../store/defaults';
 
 interface AiConfigModalProps {
   color: Color;
@@ -162,7 +162,7 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
     } else {
       // Chess engines - validate engine-specific fields
       const engineFields = {
-        depth: Math.max(1, Math.min(50, draft.depth ?? 20)),
+        depth: Math.max(1, Math.min(50, draft.depth ?? ENGINE_DEFAULT_DEPTH[draft.providerType])),
         movetimeMs: Math.max(100, Math.min(30000, draft.movetimeMs ?? 3000)),
         skillLevel: Math.max(0, Math.min(20, draft.skillLevel ?? 20)),
         luckLevel: Math.max(0, Math.min(20, draft.luckLevel ?? 0)),
@@ -299,9 +299,10 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
               <select
                 value={draft.providerType}
                 onChange={(event) => {
-                  update({ providerType: event.target.value as ProviderType });
+                  const providerType = event.target.value as ProviderType;
+                  update({ providerType });
                   // Reset fields when switching provider
-                  if (event.target.value === 'openai') {
+                  if (providerType === 'openai') {
                     update({
                       baseUrl: DEFAULT_BASE_URL,
                       model: DEFAULT_MODEL,
@@ -309,7 +310,7 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                     });
                   } else {
                     update({
-                      depth: 20,
+                      depth: ENGINE_DEFAULT_DEPTH[providerType],
                       movetimeMs: 3000,
                       skillLevel: 20,
                       luckLevel: 0,

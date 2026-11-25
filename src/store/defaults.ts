@@ -25,6 +25,17 @@ export function validProviderType(value: unknown): value is ProviderType {
 export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 export const DEFAULT_MODEL = 'gpt-4o-mini';
 
+// Sensible default search depth per engine provider. Used when creating a
+// fresh config, when sanitizing a saved game whose depth is missing, and when
+// the settings UI resets fields after the user switches provider.
+export const ENGINE_DEFAULT_DEPTH: Record<ProviderType, number> = {
+  openai: 20,
+  stockfish: 20,
+  lozza: 4,
+  tonnetto: 3,
+  fallback: 1,
+};
+
 export function createDefaultConfig(color: Color): PlayerConfig {
   return {
     baseUrl: DEFAULT_BASE_URL,
@@ -43,7 +54,7 @@ export function createDefaultConfig(color: Color): PlayerConfig {
     timeoutMs: 30_000,
     // Engine defaults (not used for API providers)
     providerType: 'openai',
-    depth: 20,
+    depth: ENGINE_DEFAULT_DEPTH.openai,
     movetimeMs: 3000,
     skillLevel: 20,
     luckLevel: 0,
@@ -104,13 +115,16 @@ function clampNumber(value: number, min: number, max: number, fallback: number):
 }
 
 export function sanitizeConfig(config: PlayerConfig): PlayerConfig {
+  const providerType = validProviderType(config.providerType)
+    ? config.providerType
+    : 'openai';
   return {
     ...config,
     baseUrl: config.baseUrl.trim(),
     apiKey: config.apiKey.trim(),
     model: config.model.trim(),
-    providerType: validProviderType(config.providerType) ? config.providerType : 'openai',
-    depth: numberOr(config.depth, 20),
+    providerType,
+    depth: numberOr(config.depth, ENGINE_DEFAULT_DEPTH[providerType]),
     movetimeMs: numberOr(config.movetimeMs, 3000),
     skillLevel: numberOr(config.skillLevel, 20),
     luckLevel: numberOr(config.luckLevel, 0),
