@@ -2,12 +2,13 @@
 
 A fully client-side, two-player chess game built with React, Vite, and TypeScript. Play Human vs Human, Human vs AI, or AI vs AI — all in your browser with no backend, no accounts, and no analytics.
 
-Each player slot can be independently configured as **Human** or **AI**, where the AI connects to any OpenAI-compatible Chat Completions endpoint (OpenAI, OpenRouter, DeepSeek, local Ollama, etc.). AI reasoning streams live, context is managed with automatic compression, and games can be saved, loaded, and exported as PGN.
+Each player slot can be independently configured as **Human** or **AI**. An AI seat can be powered by any OpenAI-compatible Chat Completions endpoint (OpenAI, OpenRouter, DeepSeek, local Ollama, etc.), or by a **local chess engine that runs entirely in the browser** — Lozza (WebAssembly), Tonnetto (Web Worker), or a deterministic Fallback engine. When using an API provider, reasoning streams live and context is managed with automatic compression. Games can be saved, loaded, and exported as PGN.
 
 ## Features
 
 - **Four play modes**: Human vs Human, Human vs AI, AI vs Human, AI vs AI
-- **Configurable AI**: Per-player provider URL, model, API key, temperature, streaming, persona, and context settings
+- **Two AI backends**: Any OpenAI-compatible API endpoint, or a local in-browser chess engine (Lozza, Tonnetto, Fallback)
+- **Configurable AI**: Per-player provider URL, model, API key, temperature, streaming, persona, and context settings for API providers; depth, movetime, skill, threads, and hash for local engines
 - **Live reasoning**: AI thoughts stream in real-time on the player panel and Thinking tab
 - **Context management**: Automatic compression when the context window fills; memory clear and resume options
 - **Full chess rules**: Castling, en passant, promotion (Q/R/B/N), check/checkmate/stalemate, threefold repetition, 50-move rule, insufficient material
@@ -25,7 +26,7 @@ Each player slot can be independently configured as **Human** or **AI**, where t
 | Rules Engine | chess.js v1.x |
 | Board Rendering | react-chessboard v4 |
 | Client State | zustand v5 |
-| AI Calls | `fetch` + SSE streaming (OpenAI-compatible) |
+| AI Calls | `fetch` + SSE streaming (OpenAI-compatible) and local WebAssembly / Web Worker chess engines |
 | Persistence | `localStorage` + Blob download/upload |
 | Styling | Plain CSS |
 
@@ -62,15 +63,16 @@ npm run typecheck
 ## Using AI Opponents
 
 1. Click the **gear icon** on a player panel to open AI settings
-2. Enter your provider's base URL (e.g., `https://api.openai.com/v1`, `http://localhost:11434/v1` for Ollama)
-3. Enter the model name (e.g., `gpt-4o-mini`, `llama3`)
-4. Enter your API key (stored only in that browser's `localStorage`)
-5. Click **Test connection** to verify, then **Save settings**
-6. Toggle the player to **AI** using the controller switch on their panel
+2. Choose a **Provider**: an OpenAI-compatible API endpoint, or a local engine (Lozza, Tonnetto, or Fallback)
+3. Configure the provider:
+   - **OpenAI-compatible API** — enter the base URL, model, and API key, then click **Test connection**
+   - **Local engine** — set search depth, movetime, skill level, threads, and hash
+4. Click **Save settings**
+5. Toggle the player to **AI** using the controller switch on their panel
 
-The AI will automatically play on its turn. If the endpoint fails, the game plays a deterministic fallback move and shows a warning.
+The AI will automatically play on its turn. When using an API endpoint, reasoning streams live; when using a local engine, the engine's depth and evaluation are shown. If an endpoint fails, the game plays a deterministic fallback move and shows a warning.
 
-### Supported Endpoints
+### OpenAI-compatible Endpoints
 
 Any OpenAI-compatible Chat Completions API:
 
@@ -79,6 +81,14 @@ Any OpenAI-compatible Chat Completions API:
 - **DeepSeek**: `https://api.deepseek.com/v1`
 - **Ollama (local)**: `http://localhost:11434/v1`
 - **Any custom proxy**
+
+### Local Chess Engines
+
+Run entirely in the browser — no API key, no network, no downloads:
+
+- **Lozza** — WebAssembly UCI engine; strong play, tuned for depth
+- **Tonnetto** — TypeScript engine running in a Web Worker; lightweight and fast
+- **Fallback** — deterministic one-ply evaluator; dependency-free and instant
 
 ## Save & Load
 
@@ -104,6 +114,11 @@ src/
   ai/prompts.ts                 # System, turn, compression templates
   ai/contextManager.ts          # Token estimation, compression, thread ops
   ai/orchestrator.ts            # Per-turn flow, retries, fallback, abort
+  ai/engines/                   # Local chess engine adapters
+    base.ts                     # EngineManager + shared ChessEngine interface
+    lozza.ts                    # Lozza (WebAssembly) engine wrapper
+    tonnetto.ts                 # Tonnetto (Web Worker) engine wrapper
+    fallback.ts                 # Deterministic fallback engine
   components/
     board/BoardArea.tsx         # Board interactions, promotion overlay
     panels/PlayerPanel.tsx      # Player info, captured pieces, status
