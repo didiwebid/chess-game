@@ -464,6 +464,7 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                       <input
                         type="number"
                         min={1}
+                        max={draft.providerType === 'lozza' ? 4 : draft.providerType === 'tonnetto' ? 3 : 50}
                         step={1}
                         value={draft.depth}
                         onChange={(event) => update({ depth: Number(event.target.value) })}
