@@ -72,7 +72,7 @@ export class StockfishEngine implements ChessEngine {
     // ---- Position + search ---------------------------------------------
     engine.postMessage(`position fen ${fen}`);
 
-    const depth = Math.min(Math.max(1, config.depth ?? 12), 50);
+    const depth = Math.min(Math.max(1, config.depth ?? 20), 50);
     const goCommand = config.movetimeMs
       ? `go movetime ${config.movetimeMs}`
       : `go depth ${depth}`;
