@@ -44,6 +44,7 @@ export function PlayerPanel({
   const showThinking = useChessStore((state) => state.showThinking);
   const streamRaw = useChessStore((state) => state.streamRaw[color]);
   const streamReasoning = useChessStore((state) => state.streamReasoning[color]);
+  const score = useChessStore((state) => state.scoreboard[color]);
 
   const elapsed = useElapsed(thinking ? thinkingStartedAt : null);
   const active = status.result === 'ongoing' && turn === color;
@@ -52,6 +53,10 @@ export function PlayerPanel({
   const isAi = player.controller === 'ai';
   const playerWon = status.result === color;
   const draw = status.result === 'draw';
+  const scorePoints = score.wins + score.draws * 0.5;
+  const scoreLabel = Number.isInteger(scorePoints)
+    ? String(scorePoints)
+    : scorePoints.toFixed(1);
   const liveReasoning =
     streamReasoning.trim() ||
     extractPartialReasoning(streamRaw) ||
@@ -101,6 +106,12 @@ export function PlayerPanel({
           <div className="player-name-row">
             <h2>{player.name}</h2>
             {active ? <span className="turn-chip">On move</span> : null}
+            <span
+              className="score-chip"
+              title={`Score: ${score.wins}W · ${score.draws}D · ${score.losses}L`}
+            >
+              {scoreLabel} pts
+            </span>
             {aiError ? (
               <button
                 type="button"
