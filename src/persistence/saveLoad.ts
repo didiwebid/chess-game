@@ -391,6 +391,10 @@ function parseMove(raw: unknown, index: number): MoveRecord | null {
         ? source.confidence
         : undefined,
     fallback: source.fallback === true,
+    pv:
+      Array.isArray(source.pv) && source.pv.every((item) => typeof item === 'string')
+        ? (source.pv as string[]).slice(0, 32)
+        : undefined,
     elapsedMs:
       typeof source.elapsedMs === 'number' && Number.isFinite(source.elapsedMs)
         ? source.elapsedMs

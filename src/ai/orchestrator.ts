@@ -21,6 +21,8 @@ import {
 import { chooseFallbackMove } from '../engine/fallback';
 import { normalizeMoveInput } from '../engine/chessUtils';
 import { EngineManager } from './engines';
+import type { EngineSearchInfo } from './engines/base';
+import { buildEngineReasoning, formatEngineInfo } from './explain';
 
 const activeRequests = new Map<Color, AbortController>();
 const MAX_ATTEMPTS = 3;
@@ -398,17 +400,45 @@ export async function requestAiTurn(color: Color): Promise<void> {
         // Chess engine path
         try {
           const engine = await EngineManager.getInstance().getEngine(config.providerType);
-          const engineResult = await engine.search(requestFen, config, signal);
-          
+
+          // Stream live search progress into the thinking panel, throttled so
+          // the UI stays smooth even when the engine emits many info lines.
+          let lastStreamAt = 0;
+          let lastStreamDepth = -1;
+          const onInfo = (info: EngineSearchInfo) => {
+            if (!isStillActive(color, requestVersion, requestFen, signal)) return;
+            const now = Date.now();
+            const depthChanged = (info.depth ?? -1) > lastStreamDepth;
+            if (!depthChanged && now - lastStreamAt < 150) return;
+            const line = formatEngineInfo(info, requestFen, color);
+            if (!line) return;
+            lastStreamAt = now;
+            lastStreamDepth = info.depth ?? lastStreamDepth;
+            useChessStore.getState().setStream(color, '', line);
+          };
+
+          const engineResult = await engine.search(requestFen, config, signal, onInfo);
+
           if (!isStillActive(color, requestVersion, requestFen, signal)) return;
-          
+
           const normalized = normalizeMoveInput(engineResult.move, requestFen);
           if (!normalized) {
             lastFailure = `The engine proposed ${engineResult.move}, which is not a legal move in this position.`;
             if (attempt === MAX_ATTEMPTS) break;
             continue;
           }
-          
+
+          // Compose a descriptive, human-readable explanation of the move.
+          const historySan = [...initial.moves.map((move) => move.san), normalized];
+          const explanation = buildEngineReasoning({
+            fen: requestFen,
+            color,
+            san: normalized,
+            result: engineResult,
+            historySan,
+            providerType: config.providerType,
+          });
+
           const elapsedMs = Date.now() - startedAt;
           const commit = useChessStore.getState().commitAiMove(
             color,
@@ -416,9 +446,10 @@ export async function requestAiTurn(color: Color): Promise<void> {
             {
               provider: config.providerType,
               model: config.providerType,
-              reasoning: `Depth ${engineResult.depth}, Eval ${engineResult.eval / 100}`,
-              confidence: 'high',
+              reasoning: explanation.reasoning,
+              confidence: explanation.confidence,
               fallback: false,
+              pv: explanation.pvSan.length > 1 ? explanation.pvSan : undefined,
               elapsedMs,
             },
             requestVersion,
@@ -436,8 +467,8 @@ export async function requestAiTurn(color: Color): Promise<void> {
             user: currentUser,
             assistant: JSON.stringify({
               move: engineResult.move,
-              reasoning: `Depth ${engineResult.depth}, Eval ${engineResult.eval / 100}`,
-              confidence: 'high',
+              reasoning: explanation.reasoning,
+              confidence: explanation.confidence,
             }),
           });
           return;

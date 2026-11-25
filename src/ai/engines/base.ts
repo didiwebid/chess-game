@@ -4,9 +4,26 @@ export interface EngineSearchResult {
   move: string;          // SAN move
   eval: number;          // Centipawns (positive = white advantage)
   depth: number;
-  pv: string[];          // Principal variation moves in SAN
+  pv: string[];          // Principal variation moves in UCI (or SAN for lightweight engines)
+  mate?: number;         // Mate in N if the engine sees one (positive = side to move mates)
   time: number;          // Milliseconds
   elapsedMs: number;     // Milliseconds
+}
+
+/**
+ * A live progress snapshot emitted by an engine while it searches. Used to
+ * drive the "live reasoning" stream in the thinking panel.
+ */
+export interface EngineSearchInfo {
+  depth?: number;
+  /** Centipawns, positive = White advantage (UCI convention). */
+  eval?: number;
+  /** Mate in N (positive = side to move mates, negative = side to move is mated). */
+  mate?: number;
+  /** Principal variation in UCI (or SAN for lightweight engines). */
+  pv?: string[];
+  nps?: number;
+  nodes?: number;
 }
 
 export interface ChessEngine {
@@ -14,7 +31,8 @@ export interface ChessEngine {
   search(
     fen: string,
     config: PlayerConfig,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onInfo?: (info: EngineSearchInfo) => void
   ): Promise<EngineSearchResult>;
   terminate(): void;
   isReady(): boolean;

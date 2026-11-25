@@ -76,6 +76,8 @@ export interface MoveRecord {
   reasoning?: string;
   confidence?: 'high' | 'medium' | 'low';
   fallback?: boolean;
+  /** Principal variation (SAN) recorded for AI moves, if the engine provided one. */
+  pv?: string[];
   timestamp: string;
   elapsedMs?: number;
 }
@@ -154,6 +156,8 @@ export interface AiMeta {
   reasoning?: string;
   confidence?: 'high' | 'medium' | 'low';
   fallback?: boolean;
+  /** Principal variation (SAN) recorded for AI moves, if the engine provided one. */
+  pv?: string[];
   elapsedMs?: number;
 }
 

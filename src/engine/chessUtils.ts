@@ -138,6 +138,7 @@ export function moveToRecord(
     reasoning: meta.reasoning,
     confidence: meta.confidence,
     fallback: meta.fallback,
+    pv: meta.pv,
     timestamp: new Date().toISOString(),
     elapsedMs: meta.elapsedMs,
   };

@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import type { PlayerConfig } from '../../types/chess';
-import { EngineSearchResult, ChessEngine } from './base';
+import { EngineSearchResult, EngineSearchInfo, ChessEngine } from './base';
 
 // Tonnetto engine (TypeScript-based, runs in Web Worker to avoid UI blocking)
 // Source: https://github.com/marcobuontempo/tonnetto
@@ -31,7 +31,8 @@ export class TonnettoEngine implements ChessEngine {
   async search(
     fen: string,
     config: PlayerConfig,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    onInfo?: (info: EngineSearchInfo) => void
   ): Promise<EngineSearchResult> {
     const startedAt = Date.now();
     const depth = Math.min(config.depth ?? 3, 3); // Cap at depth 3 for reasonable speed (Tonnetto is slow at depth > 3)
@@ -70,7 +71,7 @@ export class TonnettoEngine implements ChessEngine {
         }
 
         // Tonnetto doesn't provide eval/score/depth directly, so we estimate
-        return {
+        const result: EngineSearchResult = {
           move: sanMove,
           eval: 0, // Tonnetto doesn't expose eval directly
           depth,
@@ -78,6 +79,10 @@ export class TonnettoEngine implements ChessEngine {
           time: Date.now() - startedAt,
           elapsedMs: Date.now() - startedAt,
         };
+        if (onInfo) {
+          onInfo({ depth, pv: [uciMove] });
+        }
+        return result;
       } catch (error) {
         throw new Error(`Failed to parse move: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
