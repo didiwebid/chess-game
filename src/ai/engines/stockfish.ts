@@ -15,7 +15,7 @@ let stockfishWorkerModule: typeof import('./stockfish-worker.ts?worker') | null 
 /**
  * Stockfish engine adapter.
  *
- * Runs the vendored Stockfish 10 (asm.js build, GPLv3) in a dedicated Web
+ * Runs the vendored Stockfish engine (asm.js build, GPLv3) in a dedicated Web
  * Worker. The worker speaks raw UCI text over postMessage strings, exactly
  * like the Lozza adapter:
  *
