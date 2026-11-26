@@ -91,6 +91,10 @@ export class EngineManager {
         const { JosEngine } = await import('./jos-engine');
         engine = new JosEngine();
         break;
+      case 'betafish':
+        const { BetafishEngine } = await import('./betafish-engine');
+        engine = new BetafishEngine();
+        break;
       default:
         throw new Error(`Unknown engine type: ${type}`);
     }

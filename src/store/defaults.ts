@@ -20,7 +20,8 @@ export function validProviderType(value: unknown): value is ProviderType {
     value === 'stockfish' ||
     value === 'sunfish' ||
     value === 'fallback' ||
-    value === 'jos'
+    value === 'jos' ||
+    value === 'betafish'
   );
 }
 
@@ -38,6 +39,7 @@ export const ENGINE_DEFAULT_DEPTH: Record<ProviderType, number> = {
   sunfish: 4,
   fallback: 1,
   jos: 3,
+  betafish: 7,
 };
 
 export function createDefaultConfig(color: Color): PlayerConfig {

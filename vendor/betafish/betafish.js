@@ -2058,28 +2058,7 @@ const engine = function () {
       }
 
       bestMove = ProbePvTable();
-      line =
-        "D:" +
-        currentDepth +
-        " Best:" +
-        PrMove(bestMove) +
-        " Score:" +
-        bestScore +
-        " nodes:" +
-        SearchController.nodes;
-
       PvNum = GetPvLine(currentDepth);
-      line += " Pv:";
-      for (c = 0; c < PvNum; ++c) {
-        line += " " + PrMove(GameBoard.PvArray[c]);
-      }
-      if (currentDepth != 1) {
-        line +=
-          " Ordering:" +
-          ((SearchController.fhf / SearchController.fh) * 100).toFixed(2) +
-          "%";
-      }
-      console.log(line);
     }
 
     SearchController.best = bestMove;
