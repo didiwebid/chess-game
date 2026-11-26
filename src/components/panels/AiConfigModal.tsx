@@ -71,6 +71,7 @@ const ENGINE_SETTING_FIELDS: Record<ProviderType, readonly EngineSettingField[]>
   tonnetto: ['depth', 'movetimeMs'],
   sunfish: ['depth', 'movetimeMs'],
   fallback: [],
+  jos: ['depth', 'movetimeMs'],
 };
 
 export function AiConfigModal({ color, onClose }: AiConfigModalProps) {

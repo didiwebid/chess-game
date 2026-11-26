@@ -87,6 +87,10 @@ export class EngineManager {
         const { FallbackEngine } = await import('./fallback');
         engine = new FallbackEngine();
         break;
+      case 'jos':
+        const { JosEngine } = await import('./jos-engine');
+        engine = new JosEngine();
+        break;
       default:
         throw new Error(`Unknown engine type: ${type}`);
     }
