@@ -210,8 +210,11 @@ export function PlayerPanel({
         ) : null}
       </div>
 
-      {active && isAi && thinking && showThinking ? (
-        <div className="live-reasoning-snippet" aria-live="polite">
+      {isAi && showThinking ? (
+        <div
+          className={`live-reasoning-snippet ${active && thinking ? 'is-visible' : ''}`}
+          aria-live="polite"
+        >
           <span className="snippet-label">Reasoning</span>
           <p>{compactReasoning}<span className="typing-caret" /></p>
         </div>

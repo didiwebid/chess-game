@@ -44,7 +44,7 @@ function maybeRewriteForProxy(baseUrl: string): {
   };
 }
 
-function buildFetchUrl(baseUrl: string, endpointPath: string): {
+export function buildFetchUrl(baseUrl: string, endpointPath: string): {
   url: string;
   proxyHeaders: Record<string, string>;
 } {
@@ -527,6 +527,69 @@ export async function testAiConnection(
       `Provider error ${response.status}: ${await readErrorMessage(response)}`,
       response.status,
     );
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (timeout.timedOut()) {
+      throw new AiRequestError('The connection test timed out.', undefined, true);
+    }
+    if (
+      error instanceof TypeError ||
+      (error instanceof Error && /failed to fetch|network/i.test(error.message))
+    ) {
+      throw new AiRequestError(
+        'Could not connect. Check the base URL, CORS policy, and network.',
+      );
+    }
+    throw error;
+  } finally {
+    timeout.cleanup();
+  }
+}
+
+/**
+ * Connection test for a self-hosted Stockfish REST API
+ * (https://github.com/didiwebid/Stockfish-REST-API).
+ *
+ * Pings the API's /health endpoint and reports the engine pool size when
+ * available. Unlike testAiConnection, no model or API key is required.
+ */
+export async function testStockfishApiConnection(
+  config: PlayerConfig,
+  signal?: AbortSignal,
+): Promise<string> {
+  const base = config.baseUrl.trim().replace(/\/+$/, '');
+  if (!base) throw new AiRequestError('Add a base URL first.');
+
+  const { url: endpoint, proxyHeaders } = buildFetchUrl(base, '/health');
+  const timeout = createRequestSignal(15_000, signal);
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...proxyHeaders,
+      },
+      signal: timeout.signal,
+    });
+
+    if (!response.ok) {
+      throw new AiRequestError(
+        `Provider error ${response.status}: ${await readErrorMessage(response)}`,
+        response.status,
+      );
+    }
+
+    let engines: number | undefined;
+    try {
+      const data = (await response.json()) as { engines?: number };
+      if (typeof data.engines === 'number') engines = data.engines;
+    } catch {
+      // Non-JSON health payload — the endpoint is still reachable.
+    }
+
+    return engines
+      ? `Connection established. ${engines} Stockfish engine(s) ready.`
+      : 'Connection established. The endpoint is reachable.';
   } catch (error) {
     if (signal?.aborted) throw error;
     if (timeout.timedOut()) {

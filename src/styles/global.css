@@ -1118,6 +1118,11 @@ h4 {
   padding: 8px 14px 9px 71px;
   border-top: 1px solid rgba(213, 178, 118, 0.08);
   background: linear-gradient(90deg, rgba(213, 178, 118, 0.055), transparent);
+  visibility: hidden;
+}
+
+.live-reasoning-snippet.is-visible {
+  visibility: visible;
 }
 
 .snippet-label {

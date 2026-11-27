@@ -17,11 +17,11 @@ import { useChessStore } from '../../store/chessStore';
 import type { Color, PersonaPreset, PlayerConfig, ProviderType } from '../../types/chess';
 import { PERSONA_LABELS } from '../../ai/prompts';
 import { estimateThreadMemoryTokens } from '../../ai/contextManager';
-import { testAiConnection } from '../../ai/client';
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, ENGINE_DEFAULT_DEPTH, DEFAULT_STOCKFISH_API_URL } from '../../store/defaults';
+import { testAiConnection, testStockfishApiConnection } from '../../ai/client';
 import { abortAiTurn } from '../../ai/orchestrator';
 import { formatCount } from '../../hooks/useElapsed';
 import { maskApiKey } from '../../persistence/apiKeys';
-import { DEFAULT_BASE_URL, DEFAULT_MODEL, ENGINE_DEFAULT_DEPTH } from '../../store/defaults';
 
 interface AiConfigModalProps {
   color: Color;
@@ -67,6 +67,7 @@ type EngineSettingField =
 const ENGINE_SETTING_FIELDS: Record<ProviderType, readonly EngineSettingField[]> = {
   openai: [],
   stockfish: ['depth', 'movetimeMs', 'skillLevel', 'uciOptions'],
+  'stockfish-api': ['depth', 'movetimeMs'],
   lozza: ['depth', 'movetimeMs', 'threads', 'hash'],
   tonnetto: ['depth', 'movetimeMs'],
   sunfish: ['depth', 'movetimeMs'],
@@ -162,6 +163,30 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
         apiKey: draft.apiKey.trim(),
         timeoutMs: Math.max(5_000, Math.min(180_000, draft.timeoutMs)),
       };
+    } else if (draft.providerType === 'stockfish-api') {
+      const baseUrl = normalizeBaseUrl(draft.baseUrl);
+      if (!baseUrl) {
+        setFormError('Add a Stockfish API base URL.');
+        return null;
+      }
+      try {
+        const parsed = new URL(baseUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          setFormError('The API URL must use http:// or https://.');
+          return null;
+        }
+      } catch {
+        setFormError('That API base URL is not valid.');
+        return null;
+      }
+      return {
+        ...draft,
+        providerType: 'stockfish-api',
+        baseUrl,
+        depth: Math.max(1, Math.min(50, draft.depth ?? ENGINE_DEFAULT_DEPTH['stockfish-api'])),
+        movetimeMs: Math.max(100, Math.min(30000, draft.movetimeMs ?? 3000)),
+        timeoutMs: Math.max(5_000, Math.min(180_000, draft.timeoutMs)),
+      };
     } else {
       // Chess engines - validate engine-specific fields
       const engineFields = {
@@ -199,7 +224,10 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
     testControllerRef.current = controller;
     setTest({ status: 'loading' });
     try {
-      const message = await testAiConnection(config, controller.signal);
+      const message =
+        config.providerType === 'stockfish-api'
+          ? await testStockfishApiConnection(config, controller.signal)
+          : await testAiConnection(config, controller.signal);
       if (!controller.signal.aborted) setTest({ status: 'success', message });
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -294,7 +322,7 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
               <p className="eyebrow">Provider</p>
               <h3>AI engine</h3>
             </div>
-            <span className="config-mini-tag">{draft.providerType === 'openai' ? 'API' : 'Local engine'}</span>
+            <span className="config-mini-tag">{draft.providerType === 'openai' || draft.providerType === 'stockfish-api' ? 'API' : 'Local engine'}</span>
           </div>
           <div className="form-grid two-col">
             <label className="field">
@@ -311,6 +339,12 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                       model: DEFAULT_MODEL,
                       apiKey: '',
                     });
+                  } else if (providerType === 'stockfish-api') {
+                    update({
+                      baseUrl: DEFAULT_STOCKFISH_API_URL,
+                      depth: ENGINE_DEFAULT_DEPTH[providerType],
+                      movetimeMs: 3000,
+                    });
                   } else {
                     update({
                       depth: ENGINE_DEFAULT_DEPTH[providerType],
@@ -326,7 +360,8 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                 }}
               >
                 <option value="openai">OpenAI-compatible API</option>
-                <option value="stockfish">Stockfish</option>
+                <option value="stockfish">Stockfish (local)</option>
+                <option value="stockfish-api">Stockfish API (Online)</option>
                 <option value="lozza">Lozza</option>
                 <option value="tonnetto">Tonnetto</option>
                 <option value="betafish">Betafish</option>
@@ -447,6 +482,114 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
               </p>
             </div>
           </section>
+        ) : draft.providerType === 'stockfish-api' ? (
+          <>
+            <section className="config-section">
+              <div className="config-section-title">
+                <div>
+                  <p className="eyebrow">Connection</p>
+                  <h3>Stockfish REST API</h3>
+                </div>
+                <span className="config-mini-tag">Browser → your API</span>
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Base URL</span>
+                  <input
+                    type="url"
+                    value={draft.baseUrl}
+                    onChange={(event) => update({ baseUrl: event.target.value })}
+                    placeholder="https://your-stockfish-api.example.com"
+                    spellCheck={false}
+                    autoCapitalize="none"
+                  />
+                  <small>
+                    Host your own Stockfish REST API
+                    (github.com/didiwebid/Stockfish-REST-API). The URL must
+                    allow cross-origin requests from this browser.
+                  </small>
+                </label>
+              </div>
+
+              <div className="test-connection-row">
+                <button
+                  type="button"
+                  className="secondary-button small"
+                  onClick={handleTest}
+                  disabled={test.status === 'loading'}
+                >
+                  {test.status === 'loading' ? (
+                    <LoaderCircle size={14} className="spin" />
+                  ) : (
+                    <PlugZap size={14} />
+                  )}
+                  {test.status === 'loading' ? 'Testing…' : 'Test connection'}
+                </button>
+                {test.status === 'success' ? (
+                  <span className="test-result success">
+                    <CircleCheck size={14} />
+                    {test.message}
+                  </span>
+                ) : null}
+                {test.status === 'error' ? (
+                  <span className="test-result error">
+                    <CircleAlert size={14} />
+                    {test.message}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="security-note">
+                <ShieldCheck size={15} />
+                <p>
+                  Move requests are sent directly from your browser to this URL, so it must
+                  permit cross-origin requests. In dev mode, local endpoints (e.g.
+                  localhost) are proxied by Vite to bypass CORS.
+                </p>
+              </div>
+            </section>
+
+            <section className="config-section">
+              <div className="config-section-title">
+                <div>
+                  <p className="eyebrow">Engine</p>
+                  <h3>Chess engine settings</h3>
+                </div>
+              </div>
+              <div className="form-grid two-col">
+                <label className="field">
+                  <span>Search depth</span>
+                  <div className="input-with-suffix">
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      step={1}
+                      value={draft.depth}
+                      onChange={(event) => update({ depth: Number(event.target.value) })}
+                    />
+                    <span>plies</span>
+                  </div>
+                  <small>1 = blitz, 20 = standard, 50 = deep analysis</small>
+                </label>
+                <label className="field">
+                  <span>Time per move (ms)</span>
+                  <div className="input-with-suffix">
+                    <input
+                      type="number"
+                      min={100}
+                      max={30000}
+                      step={100}
+                      value={draft.movetimeMs}
+                      onChange={(event) => update({ movetimeMs: Number(event.target.value) })}
+                    />
+                    <span>ms</span>
+                  </div>
+                  <small>Overrides depth if set. 3000 = 3 seconds</small>
+                </label>
+              </div>
+            </section>
+          </>
         ) : (
           <section className="config-section">
             <div className="config-section-title">

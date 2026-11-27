@@ -18,6 +18,7 @@ export function validProviderType(value: unknown): value is ProviderType {
     value === 'lozza' ||
     value === 'tonnetto' ||
     value === 'stockfish' ||
+    value === 'stockfish-api' ||
     value === 'sunfish' ||
     value === 'fallback' ||
     value === 'jos' ||
@@ -28,12 +29,18 @@ export function validProviderType(value: unknown): value is ProviderType {
 export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 export const DEFAULT_MODEL = 'gpt-4o-mini';
 
+// Default base URL for the user-hosted Stockfish REST API
+// (https://github.com/didiwebid/Stockfish-REST-API). Users typically point
+// this at a self-hosted instance, e.g. "http://localhost" behind Nginx.
+export const DEFAULT_STOCKFISH_API_URL = 'http://localhost';
+
 // Sensible default search depth per engine provider. Used when creating a
 // fresh config, when sanitizing a saved game whose depth is missing, and when
 // the settings UI resets fields after the user switches provider.
 export const ENGINE_DEFAULT_DEPTH: Record<ProviderType, number> = {
   openai: 20,
   stockfish: 20,
+  'stockfish-api': 15,
   lozza: 4,
   tonnetto: 3,
   sunfish: 4,

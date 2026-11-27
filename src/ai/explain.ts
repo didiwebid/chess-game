@@ -227,26 +227,29 @@ export function describeMove(fen: string, san: string): string {
     k: 'king',
   };
 
+  const side = move.color === 'w' ? 'White' : 'Black';
+  const foe = move.color === 'w' ? 'Black' : 'White';
+
   const parts: string[] = [];
   if (move.san.startsWith('O-O-O')) {
-    parts.push('Castles queenside');
+    parts.push(`${side} castles queenside`);
   } else if (move.san.startsWith('O-O')) {
-    parts.push('Castles kingside');
+    parts.push(`${side} castles kingside`);
   } else {
-    parts.push(`${titleForColor(move.color === 'w' ? 'white' : 'black')}'s ${pieceName[move.piece]} moves to ${move.to}`);
+    parts.push(`${side} moves the ${pieceName[move.piece]} to ${move.to}`);
   }
 
   if (move.captured) {
-    parts.push(`capturing the ${pieceName[move.captured]}`);
+    parts.push(`capturing ${foe}'s ${pieceName[move.captured]} on ${move.to}`);
     if (move.san.includes('e.p.')) parts.push('en passant');
   }
   if (move.promotion) {
-    parts.push(`promoting to a ${pieceName[move.promotion]}`);
+    parts.push(`and promoting to a ${pieceName[move.promotion]}`);
   }
   if (move.san.endsWith('#')) {
-    parts.push('delivering checkmate');
+    parts.push('and it is checkmate');
   } else if (move.san.endsWith('+')) {
-    parts.push('giving check');
+    parts.push('with check');
   }
 
   return parts.join(', ');
@@ -341,35 +344,40 @@ const ENGINE_LABELS: Record<string, string> = {
 /** Material balance sentence from pawn-point totals (positive = White ahead). */
 function materialClause(white: number, black: number): string {
   const diff = white - black;
-  if (Math.abs(diff) < 0.5) return 'Material on the board is roughly balanced.';
+  if (Math.abs(diff) < 0.5) return 'Material is even — neither side is ahead.';
   const leader = diff > 0 ? 'White' : 'Black';
   const points = Math.abs(diff);
-  const text = Number.isInteger(points) ? String(points) : points.toFixed(1);
-  const unit = points >= 1.5 ? 'about ' : '';
-  return `${leader} leads by ${unit}${text} points on material.`;
+  if (Number.isInteger(points) && points <= 3) {
+    return leader === 'White' && points === 1
+      ? 'White is a pawn up.'
+      : `${leader} is ${points} pawns up.`;
+  }
+  return `${leader} has a material advantage (about ${points.toFixed(0)} points).`;
 }
 
 /** Rule-based positional suggestion, tuned to the current phase and facts. */
 function planClause(facts: PositionFacts, engineColor: Color): string {
-  if (facts.inCheck) return 'The immediate priority is answering the check safely.';
+  // When this clause runs on the position *after* the move, inCheck means the
+  // opponent's king is the one in check.
+  if (facts.inCheck) return "The opponent's king is in check, so the attack can continue immediately.";
   if (facts.phase === 'endgame') {
     const diff = facts.materialWhite - facts.materialBlack;
     const engineAhead = (engineColor === 'white' ? diff : -diff) >= 1.5;
     return engineAhead
-      ? 'In the endgame, trading pieces down and activating the king favors the side with extra material.'
-      : 'In the endgame, keep pieces on the board and avoid exchanges while searching for counterplay.';
+      ? 'With few pieces left, trading down and bringing the king into the game favors the side with extra material.'
+      : 'In the endgame, the idea is to keep pieces on the board, avoid trades, and look for counterplay.';
   }
   if (facts.phase === 'opening') {
     const engineCastled = engineColor === 'white' ? facts.whiteCastled : facts.blackCastled;
     if (facts.minorPiecesAtHome > 2 || !engineCastled) {
-      return 'In the opening, the priorities are developing the minor pieces and securing the king with castling.';
+      return 'The opening priorities are to bring out the knights and bishops and to castle for king safety.';
     }
-    return 'Development is largely complete; the next step is improving piece activity before opening the center.';
+    return 'Most pieces are already developed; the next step is to improve their activity before opening the center.';
   }
   if (facts.attackedEnemyPieces > 0) {
-    return 'Keeping pressure on the attacked pieces restricts the opponent’s defensive choices.';
+    return "Keeping the pressure on the attacked pieces limits the opponent's options.";
   }
-  return 'In the middlegame, improve piece activity and control central squares before committing to a pawn break.';
+  return 'In the middlegame, the idea is to improve piece activity and control the center before starting a pawn break.';
 }
 
 export interface EngineReasoning {
@@ -458,9 +466,9 @@ export function buildEngineReasoning(options: {
     const abs = Math.abs(result.eval);
     confidence = abs >= 100 ? 'high' : 'medium';
   } else {
-    const label = ENGINE_LABELS[providerType] ?? 'the local engine';
+    const label = ENGINE_LABELS[providerType] ?? 'the engine';
     sentence.push(
-      `${label} chose this move at depth ${result.depth} from its local search; it reports no numeric evaluation, so this confidence reflects the search depth rather than a score.`,
+      `${label} analyzed this move at depth ${result.depth}. It has no numeric evaluation, so this reflects how thoroughly it searched the position rather than a concrete score.`,
     );
     confidence = result.depth >= 8 ? 'medium' : 'low';
   }

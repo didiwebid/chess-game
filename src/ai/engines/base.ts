@@ -79,6 +79,10 @@ export class EngineManager {
         const { StockfishEngine } = await import('./stockfish');
         engine = new StockfishEngine();
         break;
+      case 'stockfish-api':
+        const { StockfishApiEngine } = await import('./stockfish-api-engine');
+        engine = new StockfishApiEngine();
+        break;
       case 'sunfish':
         const { SunfishEngine } = await import('./sunfish');
         engine = new SunfishEngine();
