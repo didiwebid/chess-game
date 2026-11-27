@@ -71,6 +71,8 @@ const ENGINE_SETTING_FIELDS: Record<ProviderType, readonly EngineSettingField[]>
   tonnetto: ['depth', 'movetimeMs'],
   sunfish: ['depth', 'movetimeMs'],
   fallback: [],
+  jos: ['depth', 'movetimeMs'],
+  betafish: ['depth', 'movetimeMs'],
 };
 
 export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
@@ -327,8 +329,10 @@ export function AiConfigModal({ color, onClose }: AiConfigModalProps) {
                 <option value="stockfish">Stockfish</option>
                 <option value="lozza">Lozza</option>
                 <option value="tonnetto">Tonnetto</option>
-                <option value="sunfish">Sunfish (lightweight)</option>
-                <option value="fallback">Fallback (deterministic)</option>
+                <option value="betafish">Betafish</option>
+                <option value="sunfish">Sunfish</option>
+                <option value="jos">Jos</option>
+                <option value="fallback">Fallback</option>
               </select>
             </label>
             <div className="field">
